@@ -68,6 +68,19 @@ export async function updateShoppingList(id: string, data: Partial<ShoppingListF
   revalidatePath("/")
 }
 
+export async function deleteShoppingList(id: string) {
+  await requireHousehold()
+  const supabase = await createServerSupabase()
+
+  const { error: itemsErr } = await supabase.from("shopping_list_items").delete().eq("list_id", id)
+  if (itemsErr) throw new Error(itemsErr.message)
+
+  const { error } = await supabase.from("shopping_lists").delete().eq("id", id)
+  if (error) throw new Error(error.message)
+  revalidatePath("/shopping")
+  revalidatePath("/")
+}
+
 // ── Items ──
 
 export async function addItem(listId: string, data: ShoppingListItemForm) {

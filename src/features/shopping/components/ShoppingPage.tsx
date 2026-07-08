@@ -38,11 +38,13 @@ import {
   ChevronDown,
   ChevronUp,
   Loader2,
+  Pencil,
 } from "lucide-react"
 import { formatMoney, formatShortDate, cn } from "@/lib/utils"
 import { useHousehold } from "@/lib/use-household"
 import { CATEGORY_LABELS, type ShoppingCategory } from "../schemas"
-import { useShoppingLists, useCreateShoppingList, useUpdateItem, useDeleteItem } from "../queries"
+import { useShoppingLists, useCreateShoppingList, useUpdateShoppingList, useUpdateItem, useDeleteItem, useDeleteShoppingList } from "../queries"
+import { useProducts } from "../queries"
 
 const statusConfig: Record<string, { label: string; variant: "default" | "secondary" | "outline"; icon: typeof Clock }> = {
   open: { label: "Pendiente", variant: "outline", icon: Clock },
@@ -59,14 +61,18 @@ export function ShoppingPage() {
   const router = useRouter()
   const { householdId, isLoading: householdLoading } = useHousehold()
   const { data: lists = [], isLoading, error } = useShoppingLists(householdId || null)
+  const { data: products = [] } = useProducts(householdId || null)
   const createList = useCreateShoppingList()
   const updateItem = useUpdateItem()
   const deleteItem = useDeleteItem()
+  const deleteList = useDeleteShoppingList()
+  const updateList = useUpdateShoppingList()
 
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [openForm, setOpenForm] = useState(false)
+  const [editingListId, setEditingListId] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [newName, setNewName] = useState("")
   const [newKind, setNewKind] = useState<"grocery" | "custom">("grocery")
@@ -74,6 +80,8 @@ export function ShoppingPage() {
   const [newItems, setNewItems] = useState<
     { name: string; quantity: number; unit: string; category: ShoppingCategory; estimated_price: number }[]
   >([{ name: "", quantity: 1, unit: "unidad", category: "otros", estimated_price: 0 }])
+
+  const [suggestionsFor, setSuggestionsFor] = useState<number | null>(null)
 
   const filtered = useMemo(() => {
     return lists.filter((l: any) => {
@@ -111,36 +119,62 @@ export function ShoppingPage() {
     setNewItems((prev) => prev.map((it, i) => (i === idx ? { ...it, [field]: value } : it)))
   }
 
-  const handleCreateList = async () => {
+  const handleSaveList = async () => {
     if (!newName.trim() || isSubmitting) return
     setIsSubmitting(true)
     try {
-      const validItems = newItems.filter((it) => it.name.trim())
-      await createList.mutateAsync({
-        name: newName,
-        kind: newKind,
-        status: "open",
-        store: newStore,
-        items: validItems.map((it) => ({
-          id: crypto.randomUUID(),
-          name: it.name,
-          quantity: it.quantity,
-          unit: it.unit,
-          category: it.category,
-          purchased: false,
-          estimated_price: it.estimated_price,
-        })),
-      })
+      if (editingListId) {
+        await updateList.mutateAsync({
+          id: editingListId,
+          data: { name: newName, kind: newKind, store: newStore || "" },
+        })
+      } else {
+        const validItems = newItems.filter((it) => it.name.trim())
+        await createList.mutateAsync({
+          name: newName,
+          kind: newKind,
+          status: "open",
+          store: newStore,
+          items: validItems.map((it) => ({
+            id: crypto.randomUUID(),
+            name: it.name,
+            quantity: it.quantity,
+            unit: it.unit,
+            category: it.category,
+            purchased: false,
+            estimated_price: it.estimated_price,
+          })),
+        })
+      }
       setOpenForm(false)
-      setNewName("")
-      setNewKind("grocery")
-      setNewStore("")
-      setNewItems([{ name: "", quantity: 1, unit: "unidad", category: "otros", estimated_price: 0 }])
+      resetForm()
     } catch (e) {
       // error handled by mutation onError
     } finally {
       setIsSubmitting(false)
     }
+  }
+
+  const openEdit = (list: any) => {
+    setEditingListId(list.id)
+    setNewName(list.name)
+    setNewKind(list.kind)
+    setNewStore(list.store ?? "")
+    setOpenForm(true)
+  }
+
+  const openCreate = () => {
+    setEditingListId(null)
+    resetForm()
+    setOpenForm(true)
+  }
+
+  const resetForm = () => {
+    setEditingListId(null)
+    setNewName("")
+    setNewKind("grocery")
+    setNewStore("")
+    setNewItems([{ name: "", quantity: 1, unit: "unidad", category: "otros", estimated_price: 0 }])
   }
 
   const loading = householdLoading || isLoading
@@ -152,14 +186,16 @@ export function ShoppingPage() {
           <h1 className="text-2xl font-bold tracking-tight">Listas de compras</h1>
           <p className="text-muted-foreground text-sm mt-1">Planifica y gestiona tus listas de compras</p>
         </div>
-        <Button size="sm" onClick={() => setOpenForm(true)}>
+        <Button size="sm" onClick={openCreate}>
           <Plus className="h-4 w-4 mr-1" /> Nueva lista
         </Button>
         <Dialog open={openForm} onOpenChange={setOpenForm}>
           <DialogContent className="sm:max-w-lg">
             <DialogHeader>
-              <DialogTitle>Nueva lista de compras</DialogTitle>
-              <DialogDescription>Crea una lista con los artículos que necesitas comprar</DialogDescription>
+              <DialogTitle>{editingListId ? "Editar lista" : "Nueva lista de compras"}</DialogTitle>
+              <DialogDescription>
+                {editingListId ? "Actualiza los datos de la lista" : "Crea una lista con los artículos que necesitas comprar"}
+              </DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-2 max-h-[60vh] overflow-y-auto pr-1">
               <div className="grid gap-2">
@@ -194,8 +230,9 @@ export function ShoppingPage() {
                   />
                 </div>
               </div>
-              <div className="border-t pt-3">
-                <div className="flex items-center justify-between mb-3">
+              {!editingListId && (
+                <div className="border-t pt-3">
+                  <div className="flex items-center justify-between mb-3">
                   <Label className="text-sm font-medium">Artículos</Label>
                   <Button variant="outline" size="sm" onClick={addItemField}>
                     <Plus className="h-3.5 w-3.5 mr-1" /> Agregar
@@ -204,12 +241,44 @@ export function ShoppingPage() {
                 <div className="grid gap-3">
                   {newItems.map((item, idx) => (
                     <div key={idx} className="grid grid-cols-12 gap-2 items-start p-3 rounded-lg border bg-muted/30">
-                      <div className="col-span-4">
+                      <div className="col-span-4 relative">
                         <Input
                           placeholder="Nombre"
                           value={item.name}
-                          onChange={(e) => updateItemField(idx, "name", e.target.value)}
+                          onFocus={() => setSuggestionsFor(idx)}
+                          onBlur={() => setTimeout(() => setSuggestionsFor(null), 150)}
+                          onChange={(e) => {
+                            updateItemField(idx, "name", e.target.value)
+                            if (e.target.value.trim()) setSuggestionsFor(idx)
+                          }}
                         />
+                        {suggestionsFor === idx && item.name.trim() && (() => {
+                          const matches = (products as any[]).filter((p: any) =>
+                            p.name.toLowerCase().includes(item.name.toLowerCase())
+                          ).slice(0, 5)
+                          if (matches.length === 0) return null
+                          return (
+                            <div className="absolute top-full left-0 right-0 z-20 mt-1 bg-popover border rounded-md shadow-md max-h-40 overflow-y-auto">
+                              {matches.map((p: any) => (
+                                <button
+                                  key={p.id}
+                                  type="button"
+                                  className="w-full text-left px-3 py-2 text-xs hover:bg-accent flex items-center justify-between gap-2"
+                                  onMouseDown={() => {
+                                    updateItemField(idx, "name", p.name)
+                                    updateItemField(idx, "category", p.category)
+                                    updateItemField(idx, "unit", p.unit ?? "unidad")
+                                    updateItemField(idx, "estimated_price", Number(p.last_price ?? 0))
+                                    setSuggestionsFor(null)
+                                  }}
+                                >
+                                  <span className="truncate font-medium">{p.name}</span>
+                                  <span className="text-muted-foreground shrink-0">{formatMoney(p.last_price, "NIO")}</span>
+                                </button>
+                              ))}
+                            </div>
+                          )
+                        })()}
                       </div>
                       <div className="col-span-2">
                         <Input
@@ -271,12 +340,13 @@ export function ShoppingPage() {
                   ))}
                 </div>
               </div>
+              )}
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setOpenForm(false)}>Cancelar</Button>
-              <Button onClick={handleCreateList} disabled={!newName.trim() || isSubmitting}>
-                {isSubmitting ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Plus className="h-4 w-4 mr-1" />}
-                Crear lista
+              <Button onClick={handleSaveList} disabled={!newName.trim() || isSubmitting}>
+                {isSubmitting ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : editingListId ? null : <Plus className="h-4 w-4 mr-1" />}
+                {editingListId ? "Actualizar" : "Crear lista"}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -334,7 +404,7 @@ export function ShoppingPage() {
           title="No hay listas de compras"
           description="Crea tu primera lista para empezar a organizar tus compras"
           actionLabel="Nueva lista"
-          onAction={() => setOpenForm(true)}
+          onAction={openCreate}
         />
       ) : (
         <div className="grid gap-3">
@@ -385,10 +455,20 @@ export function ShoppingPage() {
                         className="text-muted-foreground hover:text-destructive"
                         onClick={(e) => {
                           e.stopPropagation()
-                          deleteItem.mutate(list.id)
+                          deleteList.mutate(list.id)
                         }}
                       >
                         <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="xs"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          openEdit(list)
+                        }}
+                      >
+                        <Pencil className="h-3 w-3" />
                       </Button>
                       {isExpanded ? (
                         <ChevronUp className="h-4 w-4 text-muted-foreground" />

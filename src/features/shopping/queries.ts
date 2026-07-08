@@ -8,6 +8,7 @@ import type { ShoppingList, ShoppingListItem, Product } from "@/types/db"
 import {
   createShoppingList,
   updateShoppingList,
+  deleteShoppingList,
   addItem,
   updateItem,
   deleteItem,
@@ -86,6 +87,18 @@ export function useUpdateShoppingList() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["shopping-lists"] })
       toast.success("Lista actualizada")
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+}
+
+export function useDeleteShoppingList() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: deleteShoppingList,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["shopping-lists"] })
+      toast.success("Lista eliminada")
     },
     onError: (e: Error) => toast.error(e.message),
   })
