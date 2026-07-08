@@ -4,7 +4,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { createClient } from "@/lib/supabase/client"
 import { queryKeys as qk } from "@/lib/query-keys"
-import { saveExchangeRates } from "./actions"
+import { saveExchangeRates, addHouseholdMember, removeHouseholdMember } from "./actions"
 import type { ExchangeRateForm } from "./schemas"
 import { toast } from "sonner"
 
@@ -34,6 +34,48 @@ export function useSaveExchangeRates() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["exchange-rates"] })
       toast.success("Tasas de cambio guardadas")
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+}
+
+export function useHouseholdMembers(householdId: string | null) {
+  return useQuery({
+    queryKey: qk.household.members(householdId ?? ""),
+    queryFn: async () => {
+      if (!householdId) return [] as any[]
+      const supabase = createClient()
+      const { data, error } = await supabase
+        .from("household_members")
+        .select("id, role, display_name, joined_at, user_id")
+        .eq("household_id", householdId)
+        .order("joined_at", { ascending: true })
+      if (error) throw error
+      return data as any[]
+    },
+    enabled: !!householdId,
+  })
+}
+
+export function useAddHouseholdMember() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: addHouseholdMember,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["household"] })
+      toast.success("Miembro invitado")
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+}
+
+export function useRemoveHouseholdMember() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: removeHouseholdMember,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["household"] })
+      toast.success("Miembro removido")
     },
     onError: (e: Error) => toast.error(e.message),
   })
