@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/select"
 import { EmptyState } from "@/components/data/EmptyState"
 import { StatCard } from "@/components/data/StatCard"
+import { LoadingSkeleton } from "@/components/data/LoadingSkeleton"
 import {
   Plus,
   Search,
@@ -33,31 +34,13 @@ import {
   TrendingDown,
 } from "lucide-react"
 import { formatMoney, cn } from "@/lib/utils"
+import { useHousehold } from "@/lib/use-household"
+import {
+  useProducts,
+  useCreateProduct,
+  useUpdateProduct,
+} from "../queries"
 import { CATEGORY_LABELS, type ShoppingCategory } from "../schemas"
-
-interface Product {
-  name: string
-  category: ShoppingCategory
-  last_price: number
-  unit: string
-  favorite: boolean
-  barcode: string
-}
-
-const mockProducts: Product[] = [
-  { name: "Leche entera La Vaquita", category: "alimentos", last_price: 155, unit: "galón", favorite: true, barcode: "7460012345671" },
-  { name: "Pan integral Bimbo", category: "alimentos", last_price: 89, unit: "paquete", favorite: true, barcode: "7460012345672" },
-  { name: "Huevos grandes docena", category: "alimentos", last_price: 245, unit: "cartón", favorite: true, barcode: "7460012345673" },
-  { name: "Pechuga de pollo fresca", category: "alimentos", last_price: 148, unit: "lb", favorite: false, barcode: "7460012345674" },
-  { name: "Arroz selecto", category: "alimentos", last_price: 115, unit: "paquete", favorite: false, barcode: "7460012345675" },
-  { name: "Café Santo Domingo", category: "bebidas", last_price: 375, unit: "bolsa", favorite: true, barcode: "7460012345676" },
-  { name: "Jugo de naranja Tropicana", category: "bebidas", last_price: 180, unit: "botella", favorite: false, barcode: "7460012345677" },
-  { name: "Detergente líquido Mistolín", category: "limpieza", last_price: 320, unit: "botella", favorite: true, barcode: "7460012345678" },
-  { name: "Jabón de baño Protex", category: "higiene", last_price: 65, unit: "barra", favorite: false, barcode: "7460012345679" },
-  { name: "Papel higiénico Suave", category: "higiene", last_price: 410, unit: "paquete", favorite: true, barcode: "7460012345680" },
-  { name: "Pasta dental Colgate", category: "higiene", last_price: 175, unit: "tubo", favorite: false, barcode: "7460012345681" },
-  { name: "Comida de perro Pedigree", category: "mascotas", last_price: 850, unit: "bolsa", favorite: true, barcode: "7460012345682" },
-]
 
 const catColors: Record<ShoppingCategory, string> = {
   alimentos: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
@@ -72,139 +55,115 @@ const catColors: Record<ShoppingCategory, string> = {
   otros: "bg-muted text-muted-foreground",
 }
 
+const emptyForm = {
+  name: "",
+  category: "otros" as ShoppingCategory,
+  last_price: 0,
+  unit: "unidad",
+  barcode: "",
+  favorite: false,
+}
+
 export function ProductsPage() {
-  const [products, setProducts] = useState(mockProducts)
+  const { householdId, isLoading: hhLoading } = useHousehold()
   const [search, setSearch] = useState("")
   const [catFilter, setCatFilter] = useState("all")
+
+  const { data: products = [], isLoading } = useProducts(householdId || null, {
+    category: catFilter !== "all" ? catFilter : undefined,
+    search: search || undefined,
+  })
+
+  const createProduct = useCreateProduct()
+  const updateProduct = useUpdateProduct()
+
   const [openForm, setOpenForm] = useState(false)
-  const [newProduct, setNewProduct] = useState({ name: "", category: "otros" as ShoppingCategory, last_price: 0, unit: "unidad", barcode: "" })
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [form, setForm] = useState(emptyForm)
 
-  const filtered = useMemo(() => {
-    return products.filter((p) => {
-      if (search && !p.name.toLowerCase().includes(search.toLowerCase()) && !p.barcode.includes(search)) return false
-      if (catFilter !== "all" && p.category !== catFilter) return false
-      return true
+  const list = products as any[]
+
+  const filtered = useMemo(() => list, [list])
+
+  const favorites = list.filter((p: any) => p.favorite).length
+  const avgPrice = list.length > 0 ? list.reduce((s: number, p: any) => s + Number(p.last_price), 0) / list.length : 0
+
+  const toggleFavorite = (p: any) => {
+    updateProduct.mutate({ id: p.id, data: { favorite: !p.favorite } })
+  }
+
+  const openCreate = () => {
+    setForm(emptyForm)
+    setEditingId(null)
+    setOpenForm(true)
+  }
+
+  const openEdit = (p: any) => {
+    setForm({
+      name: p.name ?? "",
+      category: p.category ?? "otros",
+      last_price: Number(p.last_price ?? 0),
+      unit: p.unit ?? "unidad",
+      barcode: p.barcode ?? "",
     })
-  }, [products, search, catFilter])
-
-  const toggleFavorite = (name: string) => {
-    setProducts((prev) => prev.map((p) => (p.name === name ? { ...p, favorite: !p.favorite } : p)))
+    setEditingId(p.id)
+    setOpenForm(true)
   }
 
-  const handleAdd = () => {
-    if (!newProduct.name.trim()) return
-    setProducts((prev) => [
-      { ...newProduct, favorite: false },
-      ...prev,
-    ])
-    setOpenForm(false)
-    setNewProduct({ name: "", category: "otros", last_price: 0, unit: "unidad", barcode: "" })
+  const handleSave = () => {
+    if (!form.name.trim()) return
+    if (editingId) {
+      updateProduct.mutate({ id: editingId, data: form }, { onSuccess: () => setOpenForm(false) })
+    } else {
+      createProduct.mutate(form, { onSuccess: () => setOpenForm(false) })
+    }
   }
 
-  const favorites = products.filter((p) => p.favorite).length
-  const avgPrice = products.length > 0 ? products.reduce((s, p) => s + p.last_price, 0) / products.length : 0
+  if (hhLoading || isLoading) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Productos</h1>
+          <p className="text-muted-foreground text-sm mt-1">Catálogo de productos frecuentes y favoritos</p>
+        </div>
+        <LoadingSkeleton rows={4} />
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Productos</h1>
-          <p className="text-muted-foreground text-sm mt-1">Catalogo de productos frecuentes y favoritos</p>
+          <p className="text-muted-foreground text-sm mt-1">Catálogo de productos frecuentes y favoritos</p>
         </div>
-        <Button size="sm" onClick={() => setOpenForm(true)}>
+        <Button size="sm" onClick={openCreate}>
           <Plus className="h-4 w-4 mr-1" /> Agregar producto
         </Button>
-        <Dialog open={openForm} onOpenChange={setOpenForm}>
-          <DialogContent className="sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle>Agregar producto</DialogTitle>
-              <DialogDescription>Registra un producto frecuente para reutilizarlo en tus listas</DialogDescription>
-            </DialogHeader>
-            <div className="grid gap-4 py-2">
-              <div className="grid gap-2">
-                <Label htmlFor="prod-name">Nombre</Label>
-                <Input
-                  id="prod-name"
-                  value={newProduct.name}
-                  onChange={(e) => setNewProduct((p) => ({ ...p, name: e.target.value }))}
-                  placeholder="Ej: Leche entera"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="grid gap-2">
-                  <Label>Categoría</Label>
-                  <Select value={newProduct.category} onValueChange={(v) => v && setNewProduct((p) => ({ ...p, category: v as ShoppingCategory }))}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {(Object.entries(CATEGORY_LABELS) as [ShoppingCategory, string][]).map(([key, label]) => (
-                        <SelectItem key={key} value={key}>{label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="grid gap-2">
-                  <Label>Unidad</Label>
-                  <Select value={newProduct.unit} onValueChange={(v) => v && setNewProduct((p) => ({ ...p, unit: v }))}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="unidad">unidad</SelectItem>
-                      <SelectItem value="lb">lb</SelectItem>
-                      <SelectItem value="galón">galón</SelectItem>
-                      <SelectItem value="paquete">paquete</SelectItem>
-                      <SelectItem value="botella">botella</SelectItem>
-                      <SelectItem value="caja">caja</SelectItem>
-                      <SelectItem value="bolsa">bolsa</SelectItem>
-                      <SelectItem value="barra">barra</SelectItem>
-                      <SelectItem value="tubo">tubo</SelectItem>
-                      <SelectItem value="cartón">cartón</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="grid gap-2">
-                  <Label htmlFor="prod-price">Precio habitual</Label>
-                  <Input
-                    id="prod-price"
-                    type="number"
-                    min={0}
-                    value={newProduct.last_price || ""}
-                    onChange={(e) => setNewProduct((p) => ({ ...p, last_price: Number(e.target.value) || 0 }))}
-                    placeholder="0"
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="prod-barcode">Código de barras</Label>
-                  <Input
-                    id="prod-barcode"
-                    value={newProduct.barcode}
-                    onChange={(e) => setNewProduct((p) => ({ ...p, barcode: e.target.value }))}
-                    placeholder="74600..."
-                  />
-                </div>
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setOpenForm(false)}>Cancelar</Button>
-              <Button onClick={handleAdd} disabled={!newProduct.name.trim()}><Plus className="h-4 w-4 mr-1" /> Guardar</Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-        <StatCard title="Productos" value={String(products.length)} icon={ShoppingBag} />
-        <StatCard title="Favoritos" value={String(favorites)} icon={Star} />
-        <StatCard title="Precio promedio" value={formatMoney(avgPrice)} icon={TrendingDown} />
+      <div className="grid gap-4 sm:grid-cols-3">
+        <StatCard
+          title="Total productos"
+          value={String(list.length)}
+          icon={ShoppingBag}
+        />
+        <StatCard
+          title="Favoritos"
+          value={String(favorites)}
+          icon={Star}
+        />
+        <StatCard
+          title="Precio promedio"
+          value={formatMoney(avgPrice, "NIO")}
+          icon={TrendingDown}
+        />
       </div>
 
-      <div className="flex flex-col sm:flex-row gap-3">
-        <div className="relative flex-1">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+      <div className="flex flex-col sm:flex-row gap-2">
+        <div className="relative flex-1 max-w-sm">
+          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Buscar por nombre o código..."
             className="pl-8"
@@ -213,8 +172,8 @@ export function ProductsPage() {
           />
         </div>
         <Select value={catFilter} onValueChange={(v) => setCatFilter(v ?? "all")}>
-          <SelectTrigger className="w-full sm:w-44">
-            <SelectValue placeholder="Filtrar categoría" />
+          <SelectTrigger className="w-[150px] h-9 text-xs">
+            <SelectValue />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Todas</SelectItem>
@@ -228,58 +187,157 @@ export function ProductsPage() {
       {filtered.length === 0 ? (
         <EmptyState
           icon={PackageOpen}
-          title="No se encontraron productos"
-          description="Agrega tus primeros productos frecuentes o ajusta los filtros"
-          actionLabel="Agregar producto"
-          onAction={() => setOpenForm(true)}
+          title="Sin productos"
+          description={search || catFilter !== "all" ? "Intenta con otros filtros" : "Agrega tu primer producto"}
+          actionLabel={!search && catFilter === "all" ? "Agregar producto" : undefined}
+          onAction={openCreate}
         />
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {filtered.map((product) => (
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {filtered.map((p: any) => (
             <Card
-              key={product.name}
-              className={cn("group transition-all hover:shadow-md", product.favorite && "ring-1 ring-amber-500/50")}
+              key={p.id}
+              className="hover:shadow-md transition-shadow cursor-pointer"
+              onClick={() => openEdit(p)}
             >
               <CardHeader className="pb-2">
-                <div className="flex items-start justify-between gap-2">
-                  <CardTitle className="text-sm leading-tight pr-6">{product.name}</CardTitle>
-                  <button
-                    onClick={() => toggleFavorite(product.name)}
-                    className="shrink-0 mt-0.5"
-                    aria-label={product.favorite ? "Quitar de favoritos" : "Agregar a favoritos"}
+                <div className="flex items-center justify-between">
+                  <Badge className={cn("text-[10px] h-5 px-1.5", catColors[p.category as ShoppingCategory])}>
+                    {CATEGORY_LABELS[p.category as ShoppingCategory] || p.category}
+                  </Badge>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 w-7 p-0"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      toggleFavorite(p)
+                    }}
                   >
                     <Star
                       className={cn(
-                        "h-4 w-4 transition-colors",
-                        product.favorite
-                          ? "fill-amber-500 text-amber-500"
-                          : "text-muted-foreground/30 hover:text-amber-500"
+                        "h-4 w-4",
+                        p.favorite ? "text-amber-400 fill-amber-400" : "text-muted-foreground"
                       )}
                     />
-                  </button>
+                  </Button>
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="text-xl font-bold">{formatMoney(product.last_price)}</span>
-                  <span className="text-xs text-muted-foreground">/ {product.unit}</span>
+                <CardTitle className="text-sm">{p.name}</CardTitle>
+                <div className="flex items-center gap-2 mt-1">
+                  <p className="text-lg font-bold text-emerald-600">
+                    {formatMoney(p.last_price, "NIO")}
+                  </p>
+                  <span className="text-xs text-muted-foreground">
+                    /{p.unit ?? "unidad"}
+                  </span>
                 </div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <Badge className={cn("text-[10px]", catColors[product.category])}>
-                    {CATEGORY_LABELS[product.category]}
-                  </Badge>
-                  {product.barcode && (
-                    <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                      <Barcode className="h-3 w-3" />
-                      {product.barcode}
-                    </span>
-                  )}
-                </div>
+                {p.barcode && (
+                  <div className="flex items-center gap-1 mt-2 text-[10px] text-muted-foreground">
+                    <Barcode className="h-3 w-3" />
+                    {p.barcode}
+                  </div>
+                )}
               </CardContent>
             </Card>
           ))}
         </div>
       )}
+
+      <Dialog open={openForm} onOpenChange={setOpenForm}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{editingId ? "Editar producto" : "Agregar producto"}</DialogTitle>
+            <DialogDescription>
+              Registra un producto frecuente para reutilizarlo en tus listas
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-2">
+            <div className="space-y-1">
+              <Label htmlFor="prod-name">Nombre</Label>
+              <Input
+                id="prod-name"
+                value={form.name}
+                onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
+                placeholder="Ej: Leche entera"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label>Categoría</Label>
+                <Select
+                  value={form.category}
+                  onValueChange={(v) => v && setForm((p) => ({ ...p, category: v as ShoppingCategory }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(Object.entries(CATEGORY_LABELS) as [ShoppingCategory, string][]).map(([key, label]) => (
+                      <SelectItem key={key} value={key}>{label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label>Unidad</Label>
+                <Select
+                  value={form.unit}
+                  onValueChange={(v) => v && setForm((p) => ({ ...p, unit: v }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="unidad">Unidad</SelectItem>
+                    <SelectItem value="lb">Libra</SelectItem>
+                    <SelectItem value="kg">Kilogramo</SelectItem>
+                    <SelectItem value="galón">Galón</SelectItem>
+                    <SelectItem value="litro">Litro</SelectItem>
+                    <SelectItem value="botella">Botella</SelectItem>
+                    <SelectItem value="paquete">Paquete</SelectItem>
+                    <SelectItem value="bolsa">Bolsa</SelectItem>
+                    <SelectItem value="caja">Caja</SelectItem>
+                    <SelectItem value="cartón">Cartón</SelectItem>
+                    <SelectItem value="barra">Barra</SelectItem>
+                    <SelectItem value="tubo">Tubo</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="space-y-1">
+              <Label>Precio (aproximado)</Label>
+              <Input
+                type="number"
+                step="0.01"
+                placeholder="0.00"
+                value={form.last_price || ""}
+                onChange={(e) => setForm((p) => ({ ...p, last_price: parseFloat(e.target.value) || 0 }))}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>Código de barras</Label>
+              <Input
+                value={form.barcode}
+                onChange={(e) => setForm((p) => ({ ...p, barcode: e.target.value }))}
+                placeholder="Opcional"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpenForm(false)}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleSave}
+              disabled={createProduct.isPending || updateProduct.isPending || !form.name.trim()}
+            >
+              {createProduct.isPending || updateProduct.isPending ? "Guardando..." : "Guardar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
