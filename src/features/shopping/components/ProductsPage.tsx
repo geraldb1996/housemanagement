@@ -70,7 +70,6 @@ export function ProductsPage() {
   const [catFilter, setCatFilter] = useState("all")
 
   const { data: products = [], isLoading } = useProducts(householdId || null, {
-    category: catFilter !== "all" ? catFilter : undefined,
     search: search || undefined,
   })
 
@@ -83,7 +82,12 @@ export function ProductsPage() {
 
   const list = products as any[]
 
-  const filtered = useMemo(() => list, [list])
+  const filtered = useMemo(() => {
+    return list.filter((p: any) => {
+      if (catFilter !== "all" && p.category !== catFilter) return false
+      return true
+    })
+  }, [list, catFilter])
 
   const favorites = list.filter((p: any) => p.favorite).length
   const avgPrice = list.length > 0 ? list.reduce((s: number, p: any) => s + Number(p.last_price), 0) / list.length : 0
@@ -105,6 +109,7 @@ export function ProductsPage() {
       last_price: Number(p.last_price ?? 0),
       unit: p.unit ?? "unidad",
       barcode: p.barcode ?? "",
+      favorite: p.favorite ?? false,
     })
     setEditingId(p.id)
     setOpenForm(true)

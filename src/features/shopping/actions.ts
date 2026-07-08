@@ -35,16 +35,19 @@ export async function createShoppingList(data: ShoppingListForm) {
   if (error || !created) throw new Error(error?.message || "No se pudo crear la lista")
 
   if (parsed.items.length > 0) {
-    const itemsData = parsed.items.map((item, idx) => ({
-      list_id: (created as any).id,
-      name: item.name,
-      quantity: item.quantity,
-      unit: item.unit,
-      category_id: item.category,
-      estimated_price: item.estimated_price,
-      purchased: item.purchased,
-      purchased_at: item.purchased ? new Date().toISOString() : null,
-      sort_order: idx,
+    const itemsData = await Promise.all(parsed.items.map(async (item, idx) => {
+      const categoryId = await ensureShoppingCategory(supabase, householdId, item.category)
+      return {
+        list_id: (created as any).id,
+        name: item.name,
+        quantity: item.quantity,
+        unit: item.unit,
+        category_id: categoryId,
+        estimated_price: item.estimated_price,
+        purchased: item.purchased,
+        purchased_at: item.purchased ? new Date().toISOString() : null,
+        sort_order: idx,
+      }
     }))
 
     const { error: itemsError } = await supabase.from("shopping_list_items").insert(itemsData)
@@ -68,16 +71,18 @@ export async function updateShoppingList(id: string, data: Partial<ShoppingListF
 // ── Items ──
 
 export async function addItem(listId: string, data: ShoppingListItemForm) {
-  await requireHousehold()
+  const { householdId } = await requireHousehold()
   const parsed = shoppingListItemSchema.parse(data)
   const supabase = await createServerSupabase()
+
+  const categoryId = await ensureShoppingCategory(supabase, householdId, parsed.category)
 
   const { error } = await supabase.from("shopping_list_items").insert({
     list_id: listId,
     name: parsed.name,
     quantity: parsed.quantity,
     unit: parsed.unit,
-    category_id: parsed.category,
+    category_id: categoryId,
     estimated_price: parsed.estimated_price,
     purchased: parsed.purchased,
     purchased_at: parsed.purchased ? new Date().toISOString() : null,
@@ -115,16 +120,43 @@ export async function deleteItem(id: string) {
 
 // ── Products ──
 
+async function ensureShoppingCategory(supabase: Awaited<ReturnType<typeof createServerSupabase>>, householdId: string, categoryName: string): Promise<string | null> {
+  if (!categoryName) return null
+
+  const { data: existing } = await supabase
+    .from("shopping_categories")
+    .select("id")
+    .eq("household_id", householdId)
+    .eq("name", categoryName)
+    .maybeSingle()
+
+  if (existing) return existing.id
+
+  const { data: created, error } = await supabase
+    .from("shopping_categories")
+    .insert({
+      household_id: householdId,
+      name: categoryName,
+    })
+    .select("id")
+    .single()
+
+  if (error || !created) return null
+  return created.id
+}
+
 export async function createProduct(data: ProductForm) {
   const { householdId } = await requireHousehold()
   const parsed = productSchema.parse(data)
   const supabase = await createServerSupabase()
 
+  const categoryId = await ensureShoppingCategory(supabase, householdId, parsed.category)
+
   const { error } = await supabase.from("products").insert({
     household_id: householdId,
     name: parsed.name,
     default_unit: parsed.unit,
-    default_category_id: parsed.category,
+    default_category_id: categoryId,
     last_price: parsed.last_price,
     barcode: parsed.barcode || null,
     favorite: parsed.favorite,
@@ -136,19 +168,21 @@ export async function createProduct(data: ProductForm) {
 }
 
 export async function updateProduct(id: string, data: Partial<ProductForm>) {
-  await requireHousehold()
+  const { householdId } = await requireHousehold()
   const supabase = await createServerSupabase()
 
-  const update: Record<string, unknown> = { ...data }
-  if (data.unit !== undefined) {
-    update.default_unit = data.unit
-    delete update.unit
-  }
+  const update: Record<string, unknown> = {}
+  if (data.name !== undefined) update.name = data.name
+  if (data.unit !== undefined) update.default_unit = data.unit
+  if (data.last_price !== undefined) update.last_price = data.last_price
+  if (data.barcode !== undefined) update.barcode = data.barcode || null
+  if (data.favorite !== undefined) update.favorite = data.favorite
+
   if (data.category !== undefined) {
-    update.default_category_id = data.category
-    delete update.category
+    update.default_category_id = await ensureShoppingCategory(supabase, householdId, data.category)
   }
 
+  if (Object.keys(update).length === 0) return
   const { error } = await supabase.from("products").update(update).eq("id", id)
   if (error) throw new Error(error.message)
   revalidatePath("/shopping")

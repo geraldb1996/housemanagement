@@ -27,7 +27,7 @@ export function useShoppingLists(householdId: string | null) {
       const supabase = createClient()
       const { data, error } = await supabase
         .from("shopping_lists")
-        .select("*, items:shopping_list_items(*)")
+        .select("*, items:shopping_list_items(*, shopping_category:shopping_categories!category_id(name))")
         .eq("household_id", householdId)
         .order("created_at", { ascending: false })
       if (error) throw error
@@ -37,7 +37,7 @@ export function useShoppingLists(householdId: string | null) {
         total_estimated: list.items?.reduce((sum: number, i: any) => sum + (i.estimated_price ?? 0), 0) ?? 0,
         items: (list.items ?? []).map((item: any) => ({
           ...item,
-          category: item.category_id ?? "otros",
+          category: item.shopping_category?.name ?? "otros",
         })),
       })) as (ShoppingList & { items: (ShoppingListItem & { category: string })[]; item_count: number; total_estimated: number })[]
     },
@@ -53,13 +53,13 @@ export function useShoppingListItems(listId: string | null) {
       const supabase = createClient()
       const { data, error } = await supabase
         .from("shopping_list_items")
-        .select("*")
+        .select("*, shopping_category:shopping_categories!category_id(name)")
         .eq("list_id", listId)
         .order("sort_order")
       if (error) throw error
       return (data as any[]).map((item) => ({
         ...item,
-        category: item.category_id ?? "otros",
+        category: item.shopping_category?.name ?? "otros",
       })) as (ShoppingListItem & { category: string })[]
     },
     enabled: !!listId,
@@ -171,7 +171,7 @@ export function useProducts(householdId: string | null, filters?: { category?: s
       const supabase = createClient()
       let query = supabase
         .from("products")
-        .select("*")
+        .select("*, shopping_category:shopping_categories!default_category_id(name)")
         .eq("household_id", householdId)
         .order("name")
 
@@ -189,7 +189,7 @@ export function useProducts(householdId: string | null, filters?: { category?: s
       if (error) throw error
       return (data as any[]).map((p) => ({
         ...p,
-        category: p.default_category_id ?? "otros",
+        category: p.shopping_category?.name ?? "otros",
         unit: p.default_unit ?? "unidad",
       })) as (Product & { category: string; unit: string })[]
     },
