@@ -304,7 +304,7 @@ export function DashboardView({ userName }: { userName?: string | null }) {
                   variant="outline"
                   size="sm"
                   className="h-auto py-3 flex-col gap-1"
-                  onClick={() => router.push("/finance/new")}
+                  onClick={() => router.push("/finance/transactions")}
                 >
                   <Plus className="h-4 w-4" />
                   <span className="text-xs">Transacción</span>
@@ -313,7 +313,7 @@ export function DashboardView({ userName }: { userName?: string | null }) {
                   variant="outline"
                   size="sm"
                   className="h-auto py-3 flex-col gap-1"
-                  onClick={() => router.push("/shopping/lists")}
+                  onClick={() => router.push("/shopping")}
                 >
                   <ShoppingCart className="h-4 w-4" />
                   <span className="text-xs">Lista compras</span>
@@ -322,7 +322,7 @@ export function DashboardView({ userName }: { userName?: string | null }) {
                   variant="outline"
                   size="sm"
                   className="h-auto py-3 flex-col gap-1"
-                  onClick={() => router.push("/entertainment/subscriptions/new")}
+                  onClick={() => router.push("/entertainment/subscriptions")}
                 >
                   <CreditCard className="h-4 w-4" />
                   <span className="text-xs">Suscripción</span>
@@ -331,7 +331,7 @@ export function DashboardView({ userName }: { userName?: string | null }) {
                   variant="outline"
                   size="sm"
                   className="h-auto py-3 flex-col gap-1"
-                  onClick={() => router.push("/documents/new")}
+                  onClick={() => router.push("/documents")}
                 >
                   <Upload className="h-4 w-4" />
                   <span className="text-xs">Documento</span>
