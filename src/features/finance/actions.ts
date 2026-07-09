@@ -121,13 +121,26 @@ export async function updateTransaction(id: string, data: Partial<TransactionFor
 }
 
 export async function deleteTransaction(id: string) {
-  await requireHousehold()
-  const supabase = await createServerSupabase()
-  const { error } = await supabase.from("transactions").update({ deleted_at: new Date().toISOString() }).eq("id", id)
-  if (error) throw new Error(error.message)
-  revalidatePath("/finance")
-  revalidatePath("/finance/transactions")
-  revalidatePath("/")
+  try {
+    await requireHousehold()
+    const supabase = await createServerSupabase()
+    const { error } = await supabase.from("transactions").update({ deleted_at: new Date().toISOString() }).eq("id", id)
+    if (error) return { success: false as const, error: error.message }
+    revalidatePath("/finance")
+    revalidatePath("/finance/transactions")
+    revalidatePath("/")
+    return { success: true as const }
+  } catch (e) {
+    if (
+      e instanceof Error &&
+      "digest" in e &&
+      typeof (e as Error & { digest: string }).digest === "string" &&
+      (e as Error & { digest: string }).digest.startsWith("NEXT_REDIRECT")
+    ) {
+      throw e
+    }
+    return { success: false as const, error: e instanceof Error ? e.message : "Error desconocido" }
+  }
 }
 
 // ── Accounts ──

@@ -167,11 +167,15 @@ export function useDeleteTransaction() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: deleteTransaction,
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["transactions"] })
-      qc.invalidateQueries({ queryKey: ["accounts"] })
-      qc.invalidateQueries({ queryKey: ["dashboard"] })
-      toast.success("Transacción eliminada")
+    onSuccess: (result) => {
+      if (result.success) {
+        qc.invalidateQueries({ queryKey: ["transactions"] })
+        qc.invalidateQueries({ queryKey: ["accounts"] })
+        qc.invalidateQueries({ queryKey: ["dashboard"] })
+        toast.success("Transacción eliminada")
+      } else {
+        toast.error(result.error || "Error al eliminar")
+      }
     },
     onError: (e: Error) => toast.error(e.message),
   })

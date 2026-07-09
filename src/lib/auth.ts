@@ -27,6 +27,8 @@ export async function requireHousehold(): Promise<{
     .eq("user_id", session.user.id)
     .maybeSingle()
 
+  if (result.error) throw new Error(result.error.message)
+
   const member = result.data as { household_id: string; role: string } | null
 
   if (!member) redirect("/onboarding")
