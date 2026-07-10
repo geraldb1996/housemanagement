@@ -2,6 +2,8 @@
 
 An all-in-one house management suite designed for couples to organize household finances, subscriptions, shopping, inventory, and important events from a single dashboard.
 
+![HouseManagement preview](https://platform.vox.com/wp-content/uploads/sites/2/chorus/uploads/chorus_asset/file/8689467/gatsby.gif?quality=90&strip=all&crop=18.78125,0,62.4375,100)
+
 ---
 
 # Features
