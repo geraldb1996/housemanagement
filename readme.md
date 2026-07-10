@@ -51,12 +51,30 @@ Maintain an organized inventory of your belongings.
 - Appliances
 - Electronics
 - Furniture
-- Vehicles
 - Serial numbers
 - Models
 - Purchase details
 - Warranty reminders
 - Maintenance reminders
+
+## 🐾 Pets
+
+Manage profiles for every pet in your household.
+
+- Per-pet profiles (species, breed, color, weight, microchip)
+- Vaccination records with next-dose reminders
+- Medical history (consultations, treatments, costs)
+- Vet contact details
+- Age calculation from birth date
+
+## 🚗 Vehicles
+
+Track each vehicle you own with full service history.
+
+- Per-vehicle profile (brand, model, year, plate, VIN, color, fuel type)
+- Insurance tracking (company, policy, expiration alerts)
+- Service and maintenance log (mileage, cost, provider)
+- Purchase details and value tracking
 
 ## 📅 Calendar
 
@@ -118,6 +136,16 @@ NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
 ```
+
+## Set up the database
+
+The full database schema is in [`schema.sql`](./schema.sql) at the project root. To bootstrap your own Supabase backend:
+
+1. Create a new project at [supabase.com](https://supabase.com).
+2. Open **SQL Editor** in the Supabase dashboard.
+3. Copy the contents of `schema.sql` and paste it into a new query.
+4. Run the script. It creates all tables, indexes, triggers, RLS policies, views and seeds the `subscription_services` catalog.
+5. Copy your project URL and anon key from **Project Settings → API** into `.env.local`.
 
 ## Start the development server
 
