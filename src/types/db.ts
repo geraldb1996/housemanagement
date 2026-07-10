@@ -35,6 +35,11 @@ export interface Database {
       documents: { Row: Document; Insert: DocumentInsert; Update: DocumentUpdate }
       inventory_items: { Row: InventoryItem; Insert: InventoryItemInsert; Update: InventoryItemUpdate }
       inventory_maintenance: { Row: InventoryMaintenance; Insert: InventoryMaintenanceInsert; Update: InventoryMaintenanceUpdate }
+      pets: { Row: Pet; Insert: PetInsert; Update: PetUpdate }
+      pet_medical_records: { Row: PetMedicalRecord; Insert: PetMedicalRecordInsert; Update: PetMedicalRecordUpdate }
+      pet_vaccinations: { Row: PetVaccination; Insert: PetVaccinationInsert; Update: PetVaccinationUpdate }
+      vehicles: { Row: Vehicle; Insert: VehicleInsert; Update: VehicleUpdate }
+      vehicle_service_records: { Row: VehicleServiceRecord; Insert: VehicleServiceRecordInsert; Update: VehicleServiceRecordUpdate }
       tags: { Row: Tag; Insert: TagInsert; Update: TagUpdate }
       taggings: { Row: Tagging; Insert: TaggingInsert; Update: TaggingUpdate }
       attachments: { Row: Attachment; Insert: AttachmentInsert; Update: AttachmentUpdate }
@@ -177,6 +182,108 @@ export type InventoryItemUpdate = Partial<InventoryItemInsert>
 export interface InventoryMaintenance { id: string; inventory_item_id: string; performed_at: string; description: string; cost: number | null; provider: string | null; created_at: string; updated_at: string; created_by: string | null; updated_by: string | null }
 export type InventoryMaintenanceInsert = Omit<InventoryMaintenance, "id" | "created_at" | "updated_at"> & { id?: string }
 export type InventoryMaintenanceUpdate = Partial<InventoryMaintenanceInsert>
+
+// ── Pets ──
+export interface Pet {
+  id: string
+  household_id: string
+  name: string
+  species: string
+  breed: string
+  color: string
+  birth_date: string | null
+  weight_kg: number | null
+  microchip_id: string
+  vet_name: string
+  vet_phone: string
+  notes: string
+  photo_url: string
+  deleted_at: string | null
+  created_at: string
+  updated_at: string
+  created_by: string | null
+  updated_by: string | null
+}
+export type PetInsert = Omit<Pet, "id" | "created_at" | "updated_at"> & { id?: string }
+export type PetUpdate = Partial<PetInsert>
+
+export interface PetMedicalRecord {
+  id: string
+  pet_id: string
+  date: string
+  description: string
+  vet_name: string
+  cost: number | null
+  notes: string
+  created_at: string
+  updated_at: string
+  created_by: string | null
+  updated_by: string | null
+}
+export type PetMedicalRecordInsert = Omit<PetMedicalRecord, "id" | "created_at" | "updated_at"> & { id?: string }
+export type PetMedicalRecordUpdate = Partial<PetMedicalRecordInsert>
+
+export interface PetVaccination {
+  id: string
+  pet_id: string
+  vaccine_name: string
+  date_administered: string
+  next_due_date: string | null
+  vet_name: string
+  batch_number: string
+  notes: string
+  created_at: string
+  updated_at: string
+  created_by: string | null
+  updated_by: string | null
+}
+export type PetVaccinationInsert = Omit<PetVaccination, "id" | "created_at" | "updated_at"> & { id?: string }
+export type PetVaccinationUpdate = Partial<PetVaccinationInsert>
+
+// ── Vehicles ──
+export interface Vehicle {
+  id: string
+  household_id: string
+  name: string
+  brand: string
+  model: string
+  year: number | null
+  plate: string
+  vin: string
+  color: string
+  fuel_type: string
+  insurance_company: string
+  insurance_policy: string
+  insurance_expires_at: string | null
+  purchase_date: string | null
+  purchase_price: number | null
+  notes: string
+  photo_url: string
+  deleted_at: string | null
+  created_at: string
+  updated_at: string
+  created_by: string | null
+  updated_by: string | null
+}
+export type VehicleInsert = Omit<Vehicle, "id" | "created_at" | "updated_at"> & { id?: string }
+export type VehicleUpdate = Partial<VehicleInsert>
+
+export interface VehicleServiceRecord {
+  id: string
+  vehicle_id: string
+  date: string
+  description: string
+  mileage: number | null
+  cost: number | null
+  provider: string
+  notes: string
+  created_at: string
+  updated_at: string
+  created_by: string | null
+  updated_by: string | null
+}
+export type VehicleServiceRecordInsert = Omit<VehicleServiceRecord, "id" | "created_at" | "updated_at"> & { id?: string }
+export type VehicleServiceRecordUpdate = Partial<VehicleServiceRecordInsert>
 
 // ── Cross-cutting ──
 export interface Tag { id: string; household_id: string; name: string; slug: string; color: string | null; created_at: string; updated_at: string; created_by: string | null; updated_by: string | null }

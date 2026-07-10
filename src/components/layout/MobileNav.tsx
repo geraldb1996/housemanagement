@@ -21,6 +21,8 @@ const mainTabs = [
 
 const moreTabs = [
   { label: "Documentos", url: "/documents" },
+  { label: "Mascotas", url: "/pets" },
+  { label: "Vehículos", url: "/vehicles" },
   { label: "Hogar", url: "/home" },
   { label: "Calendario", url: "/calendar" },
   { label: "Ajustes", url: "/settings" },

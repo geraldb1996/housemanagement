@@ -9,6 +9,8 @@ import {
   House,
   Calendar,
   Settings,
+  PawPrint,
+  Car,
 } from "lucide-react"
 import {
   Sidebar,
@@ -69,6 +71,18 @@ const mainModules = [
     label: "Documentos",
     url: "/documents",
     activePaths: ["/documents"],
+  },
+  {
+    icon: PawPrint,
+    label: "Mascotas",
+    url: "/pets",
+    activePaths: ["/pets"],
+  },
+  {
+    icon: Car,
+    label: "Vehículos",
+    url: "/vehicles",
+    activePaths: ["/vehicles"],
   },
   {
     icon: House,

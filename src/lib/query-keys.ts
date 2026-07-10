@@ -85,6 +85,17 @@ export const queryKeys = {
     detail: (id: string) => ["inventory", "detail", id] as const,
     maintenance: (itemId: string) => ["inventory", "maintenance", itemId] as const,
   },
+  pets: {
+    all: (householdId: string) => ["pets", householdId] as const,
+    detail: (id: string) => ["pets", "detail", id] as const,
+    medicalRecords: (petId: string) => ["pets", "medical-records", petId] as const,
+    vaccinations: (petId: string) => ["pets", "vaccinations", petId] as const,
+  },
+  vehicles: {
+    all: (householdId: string) => ["vehicles", householdId] as const,
+    detail: (id: string) => ["vehicles", "detail", id] as const,
+    serviceRecords: (vehicleId: string) => ["vehicles", "service-records", vehicleId] as const,
+  },
   tags: {
     all: (householdId: string) => ["tags", householdId] as const,
   },
