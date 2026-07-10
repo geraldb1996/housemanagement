@@ -39,11 +39,12 @@ import {
   Filter,
   PawPrint,
   Weight,
+  Pencil,
 } from "lucide-react"
 import { formatShortDate, formatMoney, cn } from "@/lib/utils"
 import { useHousehold } from "@/lib/use-household"
 import { SPECIES_LABELS } from "../schemas"
-import { usePets, useCreatePet, useDeletePet, useAddMedicalRecord, useAddVaccination, useDeleteMedicalRecord, useDeleteVaccination } from "../queries"
+import { usePets, useCreatePet, useUpdatePet, useDeletePet, useAddMedicalRecord, useAddVaccination, useDeleteMedicalRecord, useDeleteVaccination } from "../queries"
 
 const speciesIcons: Record<string, React.ElementType> = {
   dog: Dog,
@@ -79,6 +80,7 @@ export function PetsPage() {
   const { householdId, isLoading: householdLoading } = useHousehold()
   const { data: pets = [], isLoading } = usePets(householdId || null)
   const createPet = useCreatePet()
+  const updatePet = useUpdatePet()
   const deletePet = useDeletePet()
   const addMedRec = useAddMedicalRecord()
   const deleteMedRec = useDeleteMedicalRecord()
@@ -90,6 +92,7 @@ export function PetsPage() {
   const [expandedId, setExpandedId] = useState<string | null>(null)
 
   const [openForm, setOpenForm] = useState(false)
+  const [editingPet, setEditingPet] = useState<any | null>(null)
   const [formName, setFormName] = useState("")
   const [formSpecies, setFormSpecies] = useState<"dog" | "cat" | "bird" | "fish" | "rodent" | "reptile" | "other">("dog")
   const [formBreed, setFormBreed] = useState("")
@@ -145,9 +148,9 @@ export function PetsPage() {
     })
   ).length
 
-  const handleAdd = () => {
+  const handleSave = () => {
     if (!formName.trim()) return
-    createPet.mutate({
+    const data = {
       name: formName,
       species: formSpecies,
       breed: formBreed,
@@ -158,12 +161,44 @@ export function PetsPage() {
       vet_name: formVetName,
       vet_phone: formVetPhone,
       notes: formNotes,
-    }, {
-      onSuccess: () => {
-        setOpenForm(false)
-        resetForm()
-      },
-    })
+    }
+    if (editingPet) {
+      updatePet.mutate({ id: editingPet.id, data }, {
+        onSuccess: () => {
+          setOpenForm(false)
+          setEditingPet(null)
+          resetForm()
+        },
+      })
+    } else {
+      createPet.mutate(data, {
+        onSuccess: () => {
+          setOpenForm(false)
+          resetForm()
+        },
+      })
+    }
+  }
+
+  const openEditForm = (pet: any) => {
+    setEditingPet(pet)
+    setFormName(pet.name)
+    setFormSpecies(pet.species)
+    setFormBreed(pet.breed ?? "")
+    setFormColor(pet.color ?? "")
+    setFormBirthDate(pet.birth_date ?? "")
+    setFormWeight(pet.weight_kg != null ? String(pet.weight_kg) : "")
+    setFormMicrochip(pet.microchip_id ?? "")
+    setFormVetName(pet.vet_name ?? "")
+    setFormVetPhone(pet.vet_phone ?? "")
+    setFormNotes(pet.notes ?? "")
+    setOpenForm(true)
+  }
+
+  const handleCloseForm = () => {
+    setOpenForm(false)
+    setEditingPet(null)
+    resetForm()
   }
 
   const resetForm = () => {
@@ -429,6 +464,31 @@ export function PetsPage() {
                           )}
                         </div>
 
+                        <div className="flex gap-2">
+                          <Button
+                            variant="outline"
+                            size="xs"
+                            className="flex-1"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              openEditForm(pet)
+                            }}
+                          >
+                            <Pencil className="h-3 w-3 mr-1" /> Editar
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="xs"
+                            className="flex-1 text-destructive hover:text-destructive"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleDelete(e as any, pet.id)
+                            }}
+                          >
+                            <Trash2 className="h-3 w-3 mr-1" /> Eliminar
+                          </Button>
+                        </div>
+
                         {pet.notes && (
                           <div className="text-xs text-muted-foreground bg-muted/50 rounded-lg p-2">
                             {pet.notes}
@@ -542,11 +602,11 @@ export function PetsPage() {
         </div>
       )}
 
-      <Dialog open={openForm} onOpenChange={setOpenForm}>
+      <Dialog open={openForm} onOpenChange={(open) => { if (!open) handleCloseForm() }}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>Agregar mascota</DialogTitle>
-            <DialogDescription>Registra una nueva mascota en tu hogar</DialogDescription>
+            <DialogTitle>{editingPet ? "Editar mascota" : "Agregar mascota"}</DialogTitle>
+            <DialogDescription>{editingPet ? `Modifica los datos de ${editingPet.name}` : "Registra una nueva mascota en tu hogar"}</DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-2 max-h-[60vh] overflow-y-auto pr-1">
             <div className="grid gap-2">
@@ -661,11 +721,15 @@ export function PetsPage() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setOpenForm(false); resetForm() }}>
+            <Button variant="outline" onClick={handleCloseForm}>
               Cancelar
             </Button>
-            <Button onClick={handleAdd} disabled={!formName.trim() || createPet.isPending}>
-              <Plus className="h-4 w-4 mr-1" /> {createPet.isPending ? "Agregando..." : "Agregar"}
+            <Button onClick={handleSave} disabled={!formName.trim() || createPet.isPending || updatePet.isPending}>
+              {editingPet ? (
+                <>{updatePet.isPending ? "Guardando..." : "Guardar cambios"}</>
+              ) : (
+                <><Plus className="h-4 w-4 mr-1" /> {createPet.isPending ? "Agregando..." : "Agregar"}</>
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

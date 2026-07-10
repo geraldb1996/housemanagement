@@ -35,16 +35,18 @@ import {
   Calendar,
   Wrench,
   Hash,
+  Pencil,
 } from "lucide-react"
 import { formatMoney, formatShortDate, cn } from "@/lib/utils"
 import { useHousehold } from "@/lib/use-household"
 import { FUEL_LABELS } from "../schemas"
-import { useVehicles, useCreateVehicle, useDeleteVehicle, useAddServiceRecord, useDeleteServiceRecord } from "../queries"
+import { useVehicles, useCreateVehicle, useUpdateVehicle, useDeleteVehicle, useAddServiceRecord, useDeleteServiceRecord } from "../queries"
 
 export function VehiclesPage() {
   const { householdId, isLoading: householdLoading } = useHousehold()
   const { data: vehicles = [], isLoading } = useVehicles(householdId || null)
   const createVehicle = useCreateVehicle()
+  const updateVehicle = useUpdateVehicle()
   const deleteVehicle = useDeleteVehicle()
   const addService = useAddServiceRecord()
   const deleteService = useDeleteServiceRecord()
@@ -54,6 +56,7 @@ export function VehiclesPage() {
   const [expandedId, setExpandedId] = useState<string | null>(null)
 
   const [openForm, setOpenForm] = useState(false)
+  const [editingVehicle, setEditingVehicle] = useState<any | null>(null)
   const [formName, setFormName] = useState("")
   const [formBrand, setFormBrand] = useState("")
   const [formModel, setFormModel] = useState("")
@@ -100,9 +103,9 @@ export function VehiclesPage() {
   const needsService = vehicles.filter((v: any) => (v.service_records ?? []).length === 0).length
   const totalValue = vehicles.reduce((sum: number, v: any) => sum + (v.purchase_price ?? 0), 0)
 
-  const handleAdd = () => {
+  const handleSave = () => {
     if (!formName.trim()) return
-    createVehicle.mutate({
+    const data = {
       name: formName,
       brand: formBrand,
       model: formModel,
@@ -117,12 +120,48 @@ export function VehiclesPage() {
       purchase_date: formPurchaseDate,
       purchase_price: formPurchasePrice ? Number(formPurchasePrice) : null,
       notes: formNotes,
-    }, {
-      onSuccess: () => {
-        setOpenForm(false)
-        resetForm()
-      },
-    })
+    }
+    if (editingVehicle) {
+      updateVehicle.mutate({ id: editingVehicle.id, data }, {
+        onSuccess: () => {
+          setOpenForm(false)
+          setEditingVehicle(null)
+          resetForm()
+        },
+      })
+    } else {
+      createVehicle.mutate(data, {
+        onSuccess: () => {
+          setOpenForm(false)
+          resetForm()
+        },
+      })
+    }
+  }
+
+  const openEditForm = (v: any) => {
+    setEditingVehicle(v)
+    setFormName(v.name)
+    setFormBrand(v.brand ?? "")
+    setFormModel(v.model ?? "")
+    setFormYear(v.year ? String(v.year) : "")
+    setFormPlate(v.plate ?? "")
+    setFormVin(v.vin ?? "")
+    setFormColor(v.color ?? "")
+    setFormFuel(v.fuel_type ?? "gasoline")
+    setFormInsCo(v.insurance_company ?? "")
+    setFormInsPolicy(v.insurance_policy ?? "")
+    setFormInsExpires(v.insurance_expires_at ?? "")
+    setFormPurchaseDate(v.purchase_date ?? "")
+    setFormPurchasePrice(v.purchase_price != null ? String(v.purchase_price) : "")
+    setFormNotes(v.notes ?? "")
+    setOpenForm(true)
+  }
+
+  const handleCloseForm = () => {
+    setOpenForm(false)
+    setEditingVehicle(null)
+    resetForm()
   }
 
   const resetForm = () => {
@@ -367,6 +406,31 @@ export function VehiclesPage() {
                           )}
                         </div>
 
+                        <div className="flex gap-2">
+                          <Button
+                            variant="outline"
+                            size="xs"
+                            className="flex-1"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              openEditForm(v)
+                            }}
+                          >
+                            <Pencil className="h-3 w-3 mr-1" /> Editar
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="xs"
+                            className="flex-1 text-destructive hover:text-destructive"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleDelete(e as any, v.id)
+                            }}
+                          >
+                            <Trash2 className="h-3 w-3 mr-1" /> Eliminar
+                          </Button>
+                        </div>
+
                         {v.notes && (
                           <div className="text-xs text-muted-foreground bg-muted/50 rounded-lg p-2">
                             {v.notes}
@@ -430,11 +494,11 @@ export function VehiclesPage() {
         </div>
       )}
 
-      <Dialog open={openForm} onOpenChange={setOpenForm}>
+      <Dialog open={openForm} onOpenChange={(open) => { if (!open) handleCloseForm() }}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>Agregar vehículo</DialogTitle>
-            <DialogDescription>Registra un nuevo vehículo en tu hogar</DialogDescription>
+            <DialogTitle>{editingVehicle ? "Editar vehículo" : "Agregar vehículo"}</DialogTitle>
+            <DialogDescription>{editingVehicle ? `Modifica los datos de ${editingVehicle.name}` : "Registra un nuevo vehículo en tu hogar"}</DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-2 max-h-[60vh] overflow-y-auto pr-1">
             <div className="grid gap-2">
@@ -512,9 +576,13 @@ export function VehiclesPage() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setOpenForm(false); resetForm() }}>Cancelar</Button>
-            <Button onClick={handleAdd} disabled={!formName.trim() || createVehicle.isPending}>
-              <Plus className="h-4 w-4 mr-1" /> {createVehicle.isPending ? "Agregando..." : "Agregar"}
+            <Button variant="outline" onClick={handleCloseForm}>Cancelar</Button>
+            <Button onClick={handleSave} disabled={!formName.trim() || createVehicle.isPending || updateVehicle.isPending}>
+              {editingVehicle ? (
+                <>{updateVehicle.isPending ? "Guardando..." : "Guardar cambios"}</>
+              ) : (
+                <><Plus className="h-4 w-4 mr-1" /> {createVehicle.isPending ? "Agregando..." : "Agregar"}</>
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
