@@ -38,6 +38,7 @@ import { formatMoney, formatShortDate, cn } from "@/lib/utils"
 import { useHousehold } from "@/lib/use-household"
 import { useObligations, useCreateObligation, useAddObligationPayment } from "@/features/finance/queries"
 import { useCreateObligationPaymentWithTransaction } from "@/features/finance/queries"
+import { useApplyBatchPayment } from "@/features/finance/queries"
 import { useAccounts } from "@/features/finance/queries"
 import { usePeople } from "@/features/finance/queries"
 
@@ -66,6 +67,7 @@ export function ObligationsPage() {
   const createObligation = useCreateObligation()
   const addPayment = useAddObligationPayment()
   const createLinkedPayment = useCreateObligationPaymentWithTransaction()
+  const applyBatchPayment = useApplyBatchPayment()
 
   const [search, setSearch] = useState("")
   const [directionFilter, setDirectionFilter] = useState("all")
@@ -84,6 +86,10 @@ export function ObligationsPage() {
   const [paymentAmount, setPaymentAmount] = useState("")
   const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split("T")[0])
   const [paymentAccountId, setPaymentAccountId] = useState("")
+
+  const [batchOpen, setBatchOpen] = useState(false)
+  const [batchAmount, setBatchAmount] = useState("")
+  const [batchAccountId, setBatchAccountId] = useState("")
 
   const list = obligations ?? []
 
@@ -119,6 +125,73 @@ export function ObligationsPage() {
   const pendingCount = filtered.filter(
     (o) => o.status === "open" || o.status === "partially_paid"
   ).length
+
+  const batchObligations = useMemo(() => {
+    if (personFilter === "all" || !dateFilter) return []
+    return list
+      .filter((o) => o.person_id === personFilter && o.due_date === dateFilter)
+      .filter((o) => o.status === "open" || o.status === "partially_paid")
+      .sort(
+        (a, b) =>
+          new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+      )
+  }, [list, personFilter, dateFilter])
+
+  const batchAllocations = useMemo(() => {
+    const amount = parseFloat(batchAmount)
+    if (!amount || isNaN(amount) || batchObligations.length === 0) return []
+    let remaining = amount
+    return batchObligations
+      .map((o) => {
+        const oblRemaining =
+          Number(o.total_amount) - Number(o.paid_amount)
+        const allocation = Math.min(oblRemaining, remaining)
+        remaining = Math.round((remaining - allocation) * 100) / 100
+        return {
+          ...o,
+          allocation,
+          isSettled:
+            Number(o.paid_amount) + allocation >= Number(o.total_amount),
+        }
+      })
+      .filter((a) => a.allocation > 0)
+  }, [batchObligations, batchAmount])
+
+  const batchTotalRemaining = useMemo(() => {
+    return batchObligations.reduce(
+      (sum, o) => sum + Number(o.total_amount) - Number(o.paid_amount),
+      0
+    )
+  }, [batchObligations])
+
+  function openBatchDialog() {
+    setBatchAmount("")
+    setBatchAccountId("")
+    setBatchOpen(true)
+  }
+
+  function handleBatchPayment() {
+    const amount = parseFloat(batchAmount)
+    if (!amount || isNaN(amount) || amount <= 0) return
+    if (personFilter === "all" || !dateFilter) return
+
+    applyBatchPayment.mutate(
+      {
+        person_id: personFilter,
+        paid_date: dateFilter,
+        total_amount: amount,
+        account_id: batchAccountId || undefined,
+        currency: accounts?.find((a) => a.id === batchAccountId)?.currency ?? undefined,
+      },
+      {
+        onSuccess: () => {
+          setBatchOpen(false)
+          setBatchAmount("")
+          setBatchAccountId("")
+        },
+      }
+    )
+  }
 
   function handleCreateObligation() {
     createObligation.mutate({
@@ -265,6 +338,11 @@ export function ObligationsPage() {
           <Button variant="outline" size="sm" onClick={exportCsv}>
             <ArrowDownRight className="h-4 w-4 mr-1" /> Exportar
           </Button>
+          {personFilter !== "all" && dateFilter && batchObligations.length > 0 && (
+            <Button size="sm" variant="secondary" onClick={openBatchDialog}>
+              <Wallet className="h-4 w-4 mr-1" /> Registrar abono
+            </Button>
+          )}
           <Button size="sm" onClick={openCreateDialog}>
             <Plus className="h-4 w-4 mr-1" /> Nueva
           </Button>
@@ -666,6 +744,141 @@ export function ObligationsPage() {
             </Button>
             <Button onClick={() => paymentForm && handleAddPayment(paymentForm)} disabled={addPayment.isPending || createLinkedPayment.isPending || !paymentAmount}>
               {addPayment.isPending || createLinkedPayment.isPending ? "Guardando..." : "Guardar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={batchOpen} onOpenChange={setBatchOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Registrar abono</DialogTitle>
+            <DialogDescription>
+              El abono se distribuye automáticamente de la obligación más antigua a la más nueva
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-2">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label>Persona</Label>
+                <p className="text-sm font-medium">
+                  {people?.find((p) => p.id === personFilter)?.name ?? ""}
+                </p>
+              </div>
+              <div className="space-y-1">
+                <Label>Fecha</Label>
+                <p className="text-sm font-medium">
+                  {dateFilter ? formatShortDate(dateFilter) : ""}
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <Label>Obligaciones a cubrir</Label>
+              <div className="border rounded-md divide-y max-h-40 overflow-y-auto">
+                {batchObligations.map((o) => {
+                  const remaining = Number(o.total_amount) - Number(o.paid_amount)
+                  return (
+                    <div key={o.id} className="flex items-center justify-between px-3 py-2 text-xs gap-2">
+                      <span className="truncate">{o.description}</span>
+                      <span className="text-muted-foreground whitespace-nowrap">
+                        Pendiente: {formatMoney(remaining, "NIO")}
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Total pendiente: {formatMoney(batchTotalRemaining, "NIO")}
+              </p>
+            </div>
+
+            <div className="space-y-1">
+              <Label>Monto del abono</Label>
+              <Input
+                type="number"
+                step="0.01"
+                placeholder="0.00"
+                value={batchAmount}
+                onChange={(e) => setBatchAmount(e.target.value)}
+              />
+              <p className="text-[10px] text-muted-foreground">
+                Sugerido: {formatMoney(batchTotalRemaining, "NIO")} (total pendiente)
+              </p>
+            </div>
+
+            <div className="space-y-1">
+              <Label>Cuenta (opcional)</Label>
+              <Select
+                value={batchAccountId || "none"}
+                onValueChange={(v) =>
+                  setBatchAccountId(v === "none" ? "" : v ?? "")
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Sin cuenta (solo abono)">
+                    {batchAccountId &&
+                      accounts?.find((a) => a.id === batchAccountId)?.name}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">
+                    Sin cuenta — solo registrar abono
+                  </SelectItem>
+                  {(accounts ?? []).map((a) => (
+                    <SelectItem key={a.id} value={a.id}>
+                      {a.name} ({a.currency})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {batchAllocations.length > 0 && (
+              <div className="space-y-1">
+                <Label>Distribución del abono</Label>
+                <div className="border rounded-md divide-y max-h-44 overflow-y-auto">
+                  {batchAllocations.map((a) => (
+                    <div
+                      key={a.id}
+                      className="flex items-center justify-between px-3 py-2 text-xs gap-2"
+                    >
+                      <div className="min-w-0">
+                        <span className="truncate block">{a.description}</span>
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            "text-[10px] h-4 px-1 mt-0.5",
+                            a.isSettled
+                              ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 border-emerald-200 dark:border-emerald-800"
+                              : "bg-amber-100 dark:bg-amber-900/30 text-amber-600 border-amber-200 dark:border-amber-800"
+                          )}
+                        >
+                          {a.isSettled ? "Liquidado" : "Parcial"}
+                        </Badge>
+                      </div>
+                      <span className="text-muted-foreground whitespace-nowrap font-medium">
+                        {formatMoney(a.allocation, "NIO")}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBatchOpen(false)}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleBatchPayment}
+              disabled={
+                applyBatchPayment.isPending ||
+                !batchAmount ||
+                parseFloat(batchAmount) <= 0
+              }
+            >
+              {applyBatchPayment.isPending ? "Aplicando..." : "Aplicar abono"}
             </Button>
           </DialogFooter>
         </DialogContent>

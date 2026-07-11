@@ -11,6 +11,7 @@ import {
   personSchema,
   obligationSchema,
   obligationPaymentSchema,
+  batchPaymentSchema,
   budgetSchema,
   budgetLineSchema,
   type TransactionForm,
@@ -19,6 +20,7 @@ import {
   type PersonForm,
   type ObligationForm,
   type ObligationPaymentForm,
+  type BatchPaymentForm,
   type BudgetForm,
   type BudgetLineForm,
 } from "./schemas"
@@ -307,6 +309,26 @@ export async function addObligationPayment(data: ObligationPaymentForm) {
 
   const { error } = await supabase.from("obligation_payments").insert(parsed)
   if (error) throw new Error(error.message)
+
+  const { data: ob } = await supabase
+    .from("payment_obligations")
+    .select("total_amount, paid_amount")
+    .eq("id", parsed.obligation_id)
+    .single()
+
+  if (ob) {
+    const newPaid = Number(ob.paid_amount) + parsed.amount
+    const newStatus = newPaid >= Number(ob.total_amount) ? "settled" : "partially_paid"
+    await supabase
+      .from("payment_obligations")
+      .update({
+        paid_amount: newPaid,
+        status: newStatus,
+        ...(newStatus === "settled" ? { settled_at: new Date().toISOString() } : {}),
+      })
+      .eq("id", parsed.obligation_id)
+  }
+
   revalidatePath("/finance/obligations")
   revalidatePath("/")
 }
@@ -361,10 +383,124 @@ export async function createObligationPaymentWithTransaction(data: {
 
   if (payErr) throw new Error(payErr.message)
 
+  const newPaid = Number(obligation.paid_amount) + data.amount
+  const newStatus = newPaid >= Number(obligation.total_amount) ? "settled" : "partially_paid"
+  await supabase
+    .from("payment_obligations")
+    .update({
+      paid_amount: newPaid,
+      status: newStatus,
+      ...(newStatus === "settled" ? { settled_at: new Date().toISOString() } : {}),
+    })
+    .eq("id", data.obligation_id)
+
   revalidatePath("/finance")
   revalidatePath("/finance/transactions")
   revalidatePath("/finance/obligations")
   revalidatePath("/")
+}
+
+export async function applyBatchPayment(data: BatchPaymentForm) {
+  const { householdId } = await requireHousehold()
+  const parsed = batchPaymentSchema.parse(data)
+  const supabase = await createServerSupabase()
+
+  const { data: obligations, error: fetchErr } = await supabase
+    .from("payment_obligations")
+    .select("*")
+    .eq("household_id", householdId)
+    .eq("person_id", parsed.person_id)
+    .eq("due_date", parsed.paid_date)
+    .in("status", ["open", "partially_paid"])
+    .is("deleted_at", null)
+    .order("created_at", { ascending: true })
+
+  if (fetchErr) throw new Error(fetchErr.message)
+  if (!obligations || obligations.length === 0) {
+    throw new Error("No hay obligaciones pendientes para esta persona en esta fecha")
+  }
+
+  const direction = obligations[0].direction
+
+  let transactionId: string | null = null
+  if (parsed.account_id) {
+    const txType = direction === "owed_to_us" ? "income" : "expense"
+    const { data: tx, error: txErr } = await supabase
+      .from("transactions")
+      .insert({
+        household_id: householdId,
+        account_id: parsed.account_id,
+        type: txType,
+        amount: parsed.total_amount,
+        currency: parsed.currency ?? "NIO",
+        date: parsed.paid_date,
+        paid: true,
+        paid_at: new Date().toISOString(),
+        person_id: parsed.person_id,
+        description: `Abono: ${obligations.length} obligación${obligations.length !== 1 ? "es" : ""}`,
+      })
+      .select("id")
+      .single()
+
+    if (txErr || !tx) throw new Error(txErr?.message ?? "Error creando transacción")
+    transactionId = tx.id
+  }
+
+  let remaining = parsed.total_amount
+  const allocations: { obligation_id: string; description: string; allocated: number; settled: boolean }[] = []
+
+  for (const obl of obligations) {
+    if (remaining <= 0.005) break
+
+    const oblRemaining = Number(obl.total_amount) - Number(obl.paid_amount)
+    const allocation = Math.round(Math.min(oblRemaining, remaining) * 100) / 100
+
+    const newPaid = Number(obl.paid_amount) + allocation
+    const isSettled = newPaid >= Number(obl.total_amount) - 0.001
+
+    const { error: updErr } = await supabase
+      .from("payment_obligations")
+      .update({
+        paid_amount: newPaid,
+        status: isSettled ? "settled" : "partially_paid",
+        ...(isSettled ? { settled_at: new Date().toISOString() } : {}),
+      })
+      .eq("id", obl.id)
+
+    if (updErr) throw new Error(updErr.message)
+
+    const { error: payErr } = await supabase
+      .from("obligation_payments")
+      .insert({
+        obligation_id: obl.id,
+        amount: allocation,
+        paid_date: parsed.paid_date,
+        transaction_id: transactionId,
+      })
+
+    if (payErr) throw new Error(payErr.message)
+
+    allocations.push({
+      obligation_id: obl.id,
+      description: obl.description,
+      allocated: allocation,
+      settled: isSettled,
+    })
+
+    remaining = Math.round((remaining - allocation) * 100) / 100
+  }
+
+  revalidatePath("/finance")
+  revalidatePath("/finance/transactions")
+  revalidatePath("/finance/obligations")
+  revalidatePath("/")
+
+  return {
+    total_applied: Math.round((parsed.total_amount - remaining) * 100) / 100,
+    remaining_unapplied: remaining,
+    allocations,
+    transactionId,
+  }
 }
 
 // ── Budgets ──

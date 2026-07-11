@@ -25,6 +25,7 @@ import {
   createObligation,
   addObligationPayment,
   createObligationPaymentWithTransaction,
+  applyBatchPayment,
   createPerson,
   createBudget,
 } from "./actions"
@@ -309,6 +310,26 @@ export function useCreateObligationPaymentWithTransaction() {
       qc.invalidateQueries({ queryKey: ["accounts"] })
       qc.invalidateQueries({ queryKey: ["dashboard"] })
       toast.success("Transacción y abono creados")
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+}
+
+export function useApplyBatchPayment() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: applyBatchPayment,
+    onSuccess: (result) => {
+      qc.invalidateQueries({ queryKey: ["obligations"] })
+      qc.invalidateQueries({ queryKey: ["transactions"] })
+      qc.invalidateQueries({ queryKey: ["accounts"] })
+      qc.invalidateQueries({ queryKey: ["dashboard"] })
+      const settled = result.allocations.filter((a) => a.settled).length
+      const partial = result.allocations.filter((a) => !a.settled).length
+      const parts: string[] = []
+      if (settled) parts.push(`${settled} liquidada${settled !== 1 ? "s" : ""}`)
+      if (partial) parts.push(`${partial} parcial${partial !== 1 ? "es" : ""}`)
+      toast.success(`Abono de ${result.total_applied.toFixed(2)} aplicado (${parts.join(", ")})`)
     },
     onError: (e: Error) => toast.error(e.message),
   })

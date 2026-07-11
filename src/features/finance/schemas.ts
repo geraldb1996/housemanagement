@@ -69,6 +69,14 @@ export const obligationPaymentSchema = z.object({
   notes: z.string().optional().nullish(),
 })
 
+export const batchPaymentSchema = z.object({
+  person_id: z.string().uuid(),
+  paid_date: z.string(),
+  total_amount: z.number().positive(),
+  account_id: z.string().uuid().optional().nullish(),
+  currency: z.string().optional(),
+})
+
 export const budgetSchema = z.object({
   name: z.string().min(1, "Requerido"),
   period_month: z.string(),
@@ -93,5 +101,6 @@ export type PersonForm = z.infer<typeof personSchema>
 export type TransactionForm = z.infer<typeof transactionSchema>
 export type ObligationForm = z.infer<typeof obligationSchema>
 export type ObligationPaymentForm = z.infer<typeof obligationPaymentSchema>
+export type BatchPaymentForm = z.infer<typeof batchPaymentSchema>
 export type BudgetForm = z.infer<typeof budgetSchema>
 export type BudgetLineForm = z.infer<typeof budgetLineSchema>
