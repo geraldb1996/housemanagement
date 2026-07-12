@@ -3,6 +3,7 @@
 
 import { revalidatePath } from "next/cache"
 import { createServerSupabase } from "@/lib/supabase/server"
+import { createServiceSupabase } from "@/lib/supabase/service"
 import { requireHousehold } from "@/lib/auth"
 import {
   transactionSchema,
@@ -125,7 +126,7 @@ export async function updateTransaction(id: string, data: Partial<TransactionFor
 export async function deleteTransaction(id: string) {
   try {
     await requireHousehold()
-    const supabase = await createServerSupabase()
+    const supabase = createServiceSupabase()
     const { error } = await supabase.from("transactions").update({ deleted_at: new Date().toISOString() }).eq("id", id)
     if (error) return { success: false as const, error: error.message }
     revalidatePath("/finance")

@@ -892,7 +892,7 @@ begin
     select tablename from pg_tables
     where schemaname = 'public'
       and tablename in (
-        'housesholds','accounts','categories','payment_cycles','people','recurring_rules',
+        'accounts','categories','payment_cycles','people','recurring_rules',
         'transactions','payment_obligations','budgets','monthly_closings',
         'shopping_lists','products','shopping_categories',
         'subscriptions','games','watchlist_items',
@@ -903,11 +903,17 @@ begin
   loop
     execute format('create policy "select own household" on public.%I for select using (is_household_member(household_id));', _tbl);
     execute format('create policy "insert own household" on public.%I for insert with check (is_household_member(household_id));', _tbl);
-    execute format('create policy "update own household" on public.%I for update using (is_household_member(household_id));', _tbl);
+    execute format('create policy "update own household" on public.%I for update using (is_household_member(household_id)) with check (is_household_member(household_id));', _tbl);
     execute format('create policy "delete own household" on public.%I for delete using (is_household_member(household_id));', _tbl);
   end loop;
 end;
 $$;
+
+-- households: PK is id, not household_id — uses id directly
+create policy "select own household" on public.households for select using (is_household_member(id));
+create policy "insert own household" on public.households for insert with check (is_household_member(id));
+create policy "update own household" on public.households for update using (is_household_member(id)) with check (is_household_member(id));
+create policy "delete own household" on public.households for delete using (is_household_member(id));
 
 -- Sub-tables: scope via parent
 create policy "select via pet" on public.pet_medical_records for select
