@@ -108,12 +108,15 @@ export async function addItem(listId: string, data: ShoppingListItemForm) {
 }
 
 export async function updateItem(id: string, data: Partial<ShoppingListItemForm>) {
-  await requireHousehold()
+  const { householdId } = await requireHousehold()
   const supabase = await createServerSupabase()
 
   const update: Record<string, unknown> = { ...data }
   if (data.purchased !== undefined) {
     update.purchased_at = data.purchased ? new Date().toISOString() : null
+  }
+  if (data.category !== undefined) {
+    update.category_id = await ensureShoppingCategory(supabase, householdId, data.category)
   }
 
   const { error } = await supabase.from("shopping_list_items").update(update).eq("id", id)

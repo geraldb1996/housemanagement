@@ -46,6 +46,33 @@ export function useShoppingLists(householdId: string | null) {
   })
 }
 
+export function useShoppingList(listId: string | null) {
+  return useQuery({
+    queryKey: qk.shoppingLists.detail(listId ?? ""),
+    queryFn: async () => {
+      if (!listId) return null
+      const supabase = createClient()
+      const { data, error } = await supabase
+        .from("shopping_lists")
+        .select("*, items:shopping_list_items(*, shopping_category:shopping_categories!category_id(name))")
+        .eq("id", listId)
+        .single()
+      if (error) throw error
+      const list = data as any
+      return {
+        ...list,
+        item_count: list.items?.length ?? 0,
+        total_estimated: list.items?.reduce((sum: number, i: any) => sum + (i.estimated_price ?? 0), 0) ?? 0,
+        items: (list.items ?? []).map((item: any) => ({
+          ...item,
+          category: item.shopping_category?.name ?? "otros",
+        })),
+      } as ShoppingList & { items: (ShoppingListItem & { category: string })[]; item_count: number; total_estimated: number }
+    },
+    enabled: !!listId,
+  })
+}
+
 export function useShoppingListItems(listId: string | null) {
   return useQuery({
     queryKey: qk.shoppingLists.items(listId ?? ""),

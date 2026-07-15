@@ -28,6 +28,7 @@ export const shoppingListSchema = z.object({
   kind: z.enum(["grocery", "custom"]).default("grocery"),
   status: z.enum(["open", "shopping", "completed"]).default("open"),
   store: z.string().optional().default(""),
+  actual_cost: z.number().min(0).optional(),
   items: z.array(shoppingListItemSchema).default([]),
 })
 

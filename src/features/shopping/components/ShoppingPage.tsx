@@ -39,6 +39,7 @@ import {
   ChevronUp,
   Loader2,
   Pencil,
+  Eye,
 } from "lucide-react"
 import { formatMoney, formatShortDate, cn } from "@/lib/utils"
 import { useHousehold } from "@/lib/use-household"
@@ -431,7 +432,25 @@ export function ShoppingPage() {
                       <div className="flex items-center gap-3 mt-1.5 text-xs text-muted-foreground">
                         <span>{list.store}</span>
                         <span>{items.length} artículos</span>
-                        <span className="font-medium text-foreground">{formatMoney(list.total_estimated ?? 0)}</span>
+                        <span className="font-medium text-foreground">Est: {formatMoney(list.total_estimated ?? 0)}</span>
+                        {list.actual_cost != null && (
+                          <>
+                            <span className="font-medium text-foreground">
+                              Real: {formatMoney(list.actual_cost)}
+                            </span>
+                            <span className={cn(
+                              "font-medium",
+                              Number(list.actual_cost) > (list.total_estimated ?? 0)
+                                ? "text-red-500"
+                                : Number(list.actual_cost) < (list.total_estimated ?? 0)
+                                  ? "text-emerald-500"
+                                  : "text-muted-foreground"
+                            )}>
+                              {Number(list.actual_cost) > (list.total_estimated ?? 0) ? "+" : ""}
+                              {formatMoney(Number(list.actual_cost) - (list.total_estimated ?? 0))}
+                            </span>
+                          </>
+                        )}
                         <span>{formatShortDate(list.created_at)}</span>
                       </div>
                     </div>
@@ -449,6 +468,16 @@ export function ShoppingPage() {
                           Convertir
                         </Button>
                       )}
+                      <Button
+                        variant="ghost"
+                        size="xs"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          router.push(`/shopping/lists/${list.id}`)
+                        }}
+                      >
+                        <Eye className="h-3 w-3" />
+                      </Button>
                       <Button
                         variant="ghost"
                         size="icon-xs"

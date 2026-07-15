@@ -136,7 +136,7 @@ export interface Product { id: string; household_id: string; name: string; defau
 export type ProductInsert = Omit<Product, "id" | "created_at" | "updated_at"> & { id?: string }
 export type ProductUpdate = Partial<ProductInsert>
 
-export interface ShoppingList { id: string; household_id: string; name: string; kind: "grocery" | "custom"; status: "open" | "shopping" | "completed" | "cancelled"; due_date: string | null; store: string | null; created_at: string; updated_at: string; created_by: string | null; updated_by: string | null }
+export interface ShoppingList { id: string; household_id: string; name: string; kind: "grocery" | "custom"; status: "open" | "shopping" | "completed" | "cancelled"; due_date: string | null; store: string | null; actual_cost: number | null; created_at: string; updated_at: string; created_by: string | null; updated_by: string | null }
 export type ShoppingListInsert = Omit<ShoppingList, "id" | "created_at" | "updated_at"> & { id?: string }
 export type ShoppingListUpdate = Partial<ShoppingListInsert>
 
