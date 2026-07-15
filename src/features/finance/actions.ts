@@ -39,6 +39,12 @@ export async function createTransaction(data: TransactionForm) {
       : parsed.amount
 
     // Insert OUT transaction first
+    let outCurrency = parsed.currency
+    if (!outCurrency) {
+      const { data: acct } = await supabase.from("accounts").select("currency").eq("id", parsed.account_id).single()
+      outCurrency = acct?.currency ?? "NIO"
+    }
+
     const { data: outTx, error: outErr } = await supabase
       .from("transactions")
       .insert({
@@ -48,7 +54,7 @@ export async function createTransaction(data: TransactionForm) {
         type: "transfer",
         amount: parsed.amount,
         transfer_direction: "out",
-        currency: parsed.currency ?? "NIO",
+        currency: outCurrency,
         date: parsed.date,
         payment_cycle_id: parsed.payment_cycle_id,
         paid: parsed.paid,
@@ -63,6 +69,12 @@ export async function createTransaction(data: TransactionForm) {
     if (outErr || !outTx) throw new Error(outErr?.message ?? "Failed to create OUT transfer")
 
     // Insert IN transaction with pair link
+    let inCurrency: string | null = null
+    {
+      const { data: dstAcct } = await supabase.from("accounts").select("currency").eq("id", parsed.destination_account_id).single()
+      inCurrency = dstAcct?.currency ?? parsed.currency ?? "NIO"
+    }
+
     const { data: inTx, error: inErr } = await supabase
       .from("transactions")
       .insert({
@@ -72,7 +84,7 @@ export async function createTransaction(data: TransactionForm) {
         type: "transfer",
         amount: destAmount,
         transfer_direction: "in",
-        currency: parsed.currency ?? "NIO",
+        currency: inCurrency,
         transfer_pair_id: outTx.id,
         date: parsed.date,
         payment_cycle_id: parsed.payment_cycle_id,
@@ -91,9 +103,14 @@ export async function createTransaction(data: TransactionForm) {
     await supabase.from("transactions").update({ transfer_pair_id: inTx.id }).eq("id", outTx.id)
   } else {
     const { destination_account_id: _dest, exchange_rate: _rate, ...rest } = parsed
+    let currency = rest.currency
+    if (!currency) {
+      const { data: acct } = await supabase.from("accounts").select("currency").eq("id", parsed.account_id).single()
+      currency = acct?.currency ?? "NIO"
+    }
     const { error } = await supabase.from("transactions").insert({
       ...rest,
-      currency: rest.currency ?? "NIO",
+      currency,
       household_id: householdId,
       paid_at: parsed.paid ? new Date().toISOString() : null,
     })
@@ -205,6 +222,9 @@ export async function correctAccountBalance(accountId: string, newBalance: numbe
 
     const type = diff > 0 ? "income" : "expense"
     const amount = Math.abs(diff)
+    const __d = new Date()
+    const __offset = __d.getTimezoneOffset()
+    const __today = new Date(__d.getTime() - __offset * 60000).toISOString().split("T")[0]
 
     const { error: txErr } = await supabase.from("transactions").insert({
       household_id: householdId,
@@ -212,7 +232,7 @@ export async function correctAccountBalance(accountId: string, newBalance: numbe
       type,
       amount: Math.round(amount * 100) / 100,
       currency: account.currency ?? "NIO",
-      date: new Date().toISOString().split("T")[0],
+      date: __today,
       paid: true,
       paid_at: new Date().toISOString(),
       description: "Corrección de balance",
@@ -354,6 +374,12 @@ export async function createObligationPaymentWithTransaction(data: {
 
   const txType = obligation.direction === "owed_to_us" ? "income" : "expense"
 
+  let currency = data.currency
+  if (!currency) {
+    const { data: acct } = await supabase.from("accounts").select("currency").eq("id", data.account_id).single()
+    currency = acct?.currency ?? "NIO"
+  }
+
   const { data: tx, error: txErr } = await supabase
     .from("transactions")
     .insert({
@@ -361,7 +387,7 @@ export async function createObligationPaymentWithTransaction(data: {
       account_id: data.account_id,
       type: txType,
       amount: data.amount,
-      currency: data.currency ?? "NIO",
+      currency,
       date: data.paid_date,
       paid: true,
       paid_at: new Date().toISOString(),

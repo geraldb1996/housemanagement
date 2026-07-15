@@ -14,8 +14,10 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Plus, PiggyBank, Wallet, CreditCard, Search, Pencil } from "lucide-react"
 import { formatMoney, cn } from "@/lib/utils"
+import { sumBalancesInBaseCurrency } from "@/lib/exchange-rates"
 import { useHousehold } from "@/lib/use-household"
 import { useAccounts, useCreateAccount, useCorrectAccountBalance } from "@/features/finance/queries"
+import { useExchangeRates } from "@/features/settings/queries"
 import { useState } from "react"
 
 const types = ["all", "bank", "cash", "savings", "credit_card"] as const
@@ -25,6 +27,7 @@ const typeIcons: Record<string, typeof Wallet> = { bank: Wallet, cash: Wallet, s
 export function AccountsPage() {
   const { householdId } = useHousehold()
   const { data: accounts, isLoading, isError, error } = useAccounts(householdId)
+  const { data: exchangeRates } = useExchangeRates(householdId)
   const createAccount = useCreateAccount()
   const correctBalance = useCorrectAccountBalance()
 
@@ -49,7 +52,7 @@ export function AccountsPage() {
     return true
   })
 
-  const total = list.reduce((s, a) => s + Number(a.current_balance ?? a.opening_balance), 0)
+  const total = sumBalancesInBaseCurrency(list, exchangeRates ?? [])
 
   function handleSubmit() {
     createAccount.mutate({

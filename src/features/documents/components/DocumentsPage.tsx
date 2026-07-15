@@ -41,7 +41,7 @@ import {
   FileArchive,
   Trash2,
 } from "lucide-react"
-import { formatShortDate, cn } from "@/lib/utils"
+import { formatShortDate, cn, todayStr } from "@/lib/utils"
 import { useHousehold } from "@/lib/use-household"
 import { KIND_LABELS, FOLDER_LABELS, type DocumentKind, type DocumentFolder } from "../schemas"
 import { useDocuments, useCreateDocument, useDeleteDocument } from "../queries"
@@ -114,7 +114,7 @@ export function DocumentsPage() {
       kind: newKind,
       folder: newFolder,
       size_kb: Math.floor(Math.random() * 3000) + 50,
-      date: new Date().toISOString().split("T")[0],
+      date: todayStr(),
       expires_at: null,
       tags: newTags
         .split(",")

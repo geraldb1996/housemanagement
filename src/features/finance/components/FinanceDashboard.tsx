@@ -17,9 +17,11 @@ import {
   BadgeDollarSign,
 } from "lucide-react"
 import { formatMoney, formatShortDate, cn } from "@/lib/utils"
+import { sumBalancesInBaseCurrency } from "@/lib/exchange-rates"
 import { useRouter } from "next/navigation"
 import { useHousehold } from "@/lib/use-household"
 import { useAccounts, useTransactions, useObligations } from "@/features/finance/queries"
+import { useExchangeRates } from "@/features/settings/queries"
 
 const accountTypeIcons: Record<string, React.ElementType> = {
   bank: Wallet,
@@ -65,10 +67,13 @@ export function FinanceDashboard() {
     error: obligationsError,
   } = useObligations(householdId || null)
 
+  const { data: exchangeRates } = useExchangeRates(householdId || null)
+
   const activeAccounts = accounts?.filter((a) => !a.is_archived) ?? []
-  const totalBalance = activeAccounts
-    .filter((a) => a.include_in_net_worth || a.account_type === "credit_card")
-    .reduce((s, a) => s + Number(a.current_balance), 0)
+  const totalBalance = sumBalancesInBaseCurrency(
+    activeAccounts.filter((a) => a.include_in_net_worth || a.account_type === "credit_card"),
+    exchangeRates ?? [],
+  )
 
   const monthTransactions = transactions?.filter((tx) => isCurrentMonth(tx.date)) ?? []
   const monthlyIncome = monthTransactions

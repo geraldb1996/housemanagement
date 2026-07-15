@@ -39,7 +39,7 @@ import {
   Trash2,
   ArrowLeftRight,
 } from "lucide-react"
-import { formatMoney, formatShortDate, cn, downloadExcelFromJson } from "@/lib/utils"
+import { formatMoney, formatShortDate, cn, downloadExcelFromJson, todayStr } from "@/lib/utils"
 import { convertAmount } from "@/lib/exchange-rates"
 import { useHousehold } from "@/lib/use-household"
 import {
@@ -55,6 +55,8 @@ import { useCreateObligationPaymentWithTransaction } from "@/features/finance/qu
 import { useExchangeRates } from "@/features/settings/queries"
 import type { TransactionForm } from "@/features/finance/schemas"
 
+const BASE_CURRENCY = "NIO"
+
 const typeIcons = { income: TrendingUp, expense: TrendingDown, transfer: BadgeDollarSign }
 const typeStyles = {
   income: "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600",
@@ -67,7 +69,7 @@ const emptyForm: TransactionForm = {
   category_id: null,
   type: "expense",
   amount: 0,
-  date: new Date().toISOString().split("T")[0],
+  date: "",
   paid: false,
   description: "",
   notes: "",
@@ -83,6 +85,8 @@ export function TransactionsPage() {
   const [search, setSearch] = useState("")
   const [typeFilter, setTypeFilter] = useState("all")
   const [paidFilter, setPaidFilter] = useState("all")
+  const [accountFilter, setAccountFilter] = useState("all")
+  const [categoryFilter, setCategoryFilter] = useState("all")
   const [openForm, setOpenForm] = useState(false)
   const [form, setForm] = useState<TransactionForm>(emptyForm)
 
@@ -93,6 +97,8 @@ export function TransactionsPage() {
   } = useTransactions(householdId || null, {
     type: typeFilter !== "all" ? typeFilter : undefined,
     paid: paidFilter !== "all" ? paidFilter : undefined,
+    account_id: accountFilter !== "all" ? accountFilter : undefined,
+    category_id: categoryFilter !== "all" ? categoryFilter : undefined,
     search: search || undefined,
   })
 
@@ -177,7 +183,10 @@ export function TransactionsPage() {
           >
             <Download className="h-4 w-4 mr-1" /> Exportar
           </Button>
-          <Dialog open={openForm} onOpenChange={setOpenForm}>
+          <Dialog open={openForm} onOpenChange={(open) => {
+            setOpenForm(open)
+            if (open) setForm({ ...emptyForm, date: todayStr() })
+          }}>
             <DialogTrigger render={<Button size="sm" />}>
               <Plus className="h-4 w-4 mr-1" /> Nueva
             </DialogTrigger>
@@ -286,7 +295,22 @@ export function TransactionsPage() {
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1">
                       <Label>Cuenta</Label>
-                      <Select value={form.account_id || "none"} onValueChange={(v) => setField("account_id", v === "none" ? "" : (v ?? ""))}>
+                      <Select value={form.account_id || "none"} onValueChange={(v) => {
+                        const accountId = v === "none" ? "" : (v ?? "")
+                        setField("account_id", accountId)
+                        if (accountId) {
+                          const account = accounts?.find((a) => a.id === accountId)
+                          if (account) {
+                            setField("currency", account.currency)
+                            if (account.currency === BASE_CURRENCY) {
+                              setField("exchange_rate", null)
+                            }
+                          }
+                        } else {
+                          setField("currency", null)
+                          setField("exchange_rate", null)
+                        }
+                      }}>
                         <SelectTrigger>
                           <SelectValue placeholder="Seleccionar">
                             {form.account_id && accounts?.find((a) => a.id === form.account_id)?.name}
@@ -298,7 +322,7 @@ export function TransactionsPage() {
                             <SelectItem value="loading" disabled>Cargando...</SelectItem>
                           ) : (
                             accounts?.map((a) => (
-                              <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
+                              <SelectItem key={a.id} value={a.id}>{a.name} ({a.currency})</SelectItem>
                             ))
                           )}
                         </SelectContent>
@@ -328,6 +352,31 @@ export function TransactionsPage() {
                       </Select>
                     </div>
                   </div>
+                  {form.type !== "transfer" && form.currency && form.currency !== BASE_CURRENCY && form.amount > 0 && (
+                    <div className="rounded-lg border p-3 space-y-3">
+                      <div className="text-sm font-medium">Conversi&oacute;n a {BASE_CURRENCY}</div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                          <Label>Tasa de cambio (1 {form.currency} = ? {BASE_CURRENCY})</Label>
+                          <Input
+                            type="number"
+                            step="0.0001"
+                            placeholder="Ej: 36.50"
+                            value={form.exchange_rate ?? ""}
+                            onChange={(e) => setField("exchange_rate", parseFloat(e.target.value) || null)}
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label>Equivalente en {BASE_CURRENCY}</Label>
+                          <div className="h-9 flex items-center px-3 rounded-md border bg-muted/50 text-sm font-medium">
+                            {form.exchange_rate
+                              ? formatMoney(form.amount * form.exchange_rate, BASE_CURRENCY)
+                              : "—"}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                   {form.type === "transfer" && (
                     <div className="space-y-3 rounded-lg border p-3">
                       <div className="space-y-1">
@@ -340,9 +389,8 @@ export function TransactionsPage() {
                             const srcAccount = accounts?.find((a) => a.id === form.account_id)
                             const dstAccount = accounts?.find((a) => a.id === v)
                             if (srcAccount && dstAccount && form.amount > 0) {
-                              const baseCurrency = "NIO"
-                              const rates = exchangeRates ?? []
-                              const converted = convertAmount(form.amount, srcAccount.currency, dstAccount.currency, rates, baseCurrency)
+                            const rates = exchangeRates ?? []
+                            const converted = convertAmount(form.amount, srcAccount.currency, dstAccount.currency, rates, BASE_CURRENCY)
                               if (converted !== null) {
                                 const rate = form.amount > 0 ? converted / form.amount : 0
                                 setField("exchange_rate", rate)
@@ -380,7 +428,7 @@ export function TransactionsPage() {
                         const src = accounts?.find((a) => a.id === form.account_id)
                         const dst = accounts?.find((a) => a.id === form.destination_account_id)
                         if (!src || !dst || src.currency === dst.currency) return null
-                        const converted = convertAmount(form.amount, src.currency, dst.currency, exchangeRates, "NIO")
+                        const converted = convertAmount(form.amount, src.currency, dst.currency, exchangeRates, BASE_CURRENCY)
                         return (
                           <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/50 rounded-lg px-3 py-2">
                             <ArrowLeftRight className="h-3.5 w-3.5 flex-shrink-0" />
@@ -439,37 +487,71 @@ export function TransactionsPage() {
         </div>
       </div>
 
-      <div className="flex flex-col sm:flex-row gap-2">
-        <div className="relative flex-1">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Buscar por descripción o categoría..."
-            className="pl-8"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
+      <div className="flex flex-col gap-2">
+        <div className="flex flex-col sm:flex-row gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Buscar por descripción o categoría..."
+              className="pl-8"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+          <div className="flex gap-2">
+            <Select value={typeFilter} onValueChange={(v) => setTypeFilter(v ?? "all")}>
+              <SelectTrigger className="w-[130px] h-9 text-xs">
+                <Filter className="h-3 w-3 mr-1" />
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos</SelectItem>
+                <SelectItem value="income">Ingresos</SelectItem>
+                <SelectItem value="expense">Gastos</SelectItem>
+                <SelectItem value="transfer">Transferencias</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={paidFilter} onValueChange={(v) => setPaidFilter(v ?? "all")}>
+              <SelectTrigger className="w-[130px] h-9 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos</SelectItem>
+                <SelectItem value="paid">Pagado</SelectItem>
+                <SelectItem value="pending">Pendiente</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
-        <div className="flex gap-2">
-          <Select value={typeFilter} onValueChange={(v) => setTypeFilter(v ?? "all")}>
-            <SelectTrigger className="w-[130px] h-9 text-xs">
-              <Filter className="h-3 w-3 mr-1" />
-              <SelectValue />
+        <div className="flex flex-col sm:flex-row gap-2">
+          <Select value={accountFilter} onValueChange={(v) => setAccountFilter(v ?? "all")}>
+            <SelectTrigger className="w-full sm:w-[200px] h-9 text-xs">
+              <SelectValue placeholder="Todas las cuentas" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Todos</SelectItem>
-              <SelectItem value="income">Ingresos</SelectItem>
-              <SelectItem value="expense">Gastos</SelectItem>
-              <SelectItem value="transfer">Transferencias</SelectItem>
+              <SelectItem value="all">Todas las cuentas</SelectItem>
+              {accountsLoading ? (
+                <SelectItem value="loading" disabled>Cargando...</SelectItem>
+              ) : (
+                (accounts ?? []).map((a) => (
+                  <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
+                ))
+              )}
             </SelectContent>
           </Select>
-          <Select value={paidFilter} onValueChange={(v) => setPaidFilter(v ?? "all")}>
-            <SelectTrigger className="w-[130px] h-9 text-xs">
-              <SelectValue />
+          <Select value={categoryFilter} onValueChange={(v) => setCategoryFilter(v ?? "all")}>
+            <SelectTrigger className="w-full sm:w-[200px] h-9 text-xs">
+              <SelectValue placeholder="Todas las categorías" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Todos</SelectItem>
-              <SelectItem value="paid">Pagado</SelectItem>
-              <SelectItem value="pending">Pendiente</SelectItem>
+              <SelectItem value="all">Todas las categorías</SelectItem>
+              {categoriesLoading ? (
+                <SelectItem value="loading" disabled>Cargando...</SelectItem>
+              ) : (
+                (categories ?? []).map((c) => (
+                  <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                ))
+              )}
             </SelectContent>
           </Select>
         </div>
@@ -538,7 +620,7 @@ export function TransactionsPage() {
                       tx.type === "income" ? "text-emerald-600" : tx.type === "expense" ? "text-red-600" : "text-blue-600"
                     )}>
                       {tx.type === "income" ? "+" : tx.type === "expense" ? "-" : ""}
-                      {formatMoney(tx.amount, "NIO")}
+                      {formatMoney(tx.amount, tx.currency)}
                     </span>
                     <button
                       type="button"

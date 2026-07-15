@@ -97,7 +97,9 @@ export function CalendarView() {
     return d
   }, [])
 
-  const todayStr = now.toISOString().split("T")[0]
+  const d = new Date()
+  const offset = d.getTimezoneOffset()
+  const today = new Date(d.getTime() - offset * 60000).toISOString().split("T")[0]
   const thirtyDaysStr = thirtyDaysFromNow.toISOString().split("T")[0]
 
   const obligationsQuery = useQuery({
@@ -198,7 +200,7 @@ export function CalendarView() {
         .select("*")
         .eq("household_id", householdId)
         .is("deleted_at", null)
-        .gte("date", todayStr)
+        .gte("date", today)
         .eq("paid", false)
         .order("date", { ascending: true })
       if (error) throw error
@@ -296,16 +298,16 @@ export function CalendarView() {
 
   const eventsInRange = useMemo(() => {
     return allEvents
-      .filter(e => e.date >= todayStr && e.date <= thirtyDaysStr)
+      .filter(e => e.date >= today && e.date <= thirtyDaysStr)
       .filter(e => moduleFilter === "all" || e.module === moduleFilter)
       .sort((a, b) => a.date.localeCompare(b.date))
-  }, [allEvents, todayStr, thirtyDaysStr, moduleFilter])
+  }, [allEvents, today, thirtyDaysStr, moduleFilter])
 
   const allEventsInRange = useMemo(() => {
     return allEvents
-      .filter(e => e.date >= todayStr && e.date <= thirtyDaysStr)
+      .filter(e => e.date >= today && e.date <= thirtyDaysStr)
       .sort((a, b) => a.date.localeCompare(b.date))
-  }, [allEvents, todayStr, thirtyDaysStr])
+  }, [allEvents, today, thirtyDaysStr])
 
   const groupedByDate = useMemo(() => {
     const map = new Map<string, CalendarEvent[]>()
@@ -483,14 +485,14 @@ export function CalendarView() {
                 </div>
               ))}
               {monthDays.map((d, i) => {
-                const isToday = d.date === todayStr
+                const isToday = d.date === today
                 return (
                   <div
                     key={i}
                     className={cn(
                       "bg-card p-1.5 min-h-[64px] text-xs",
                       !d.day && "opacity-30",
-                      d.date < todayStr && "opacity-40"
+                      d.date < today && "opacity-40"
                     )}
                   >
                     {d.day > 0 && (
@@ -534,7 +536,7 @@ export function CalendarView() {
             />
           ) : (
             Array.from(groupedByDate.entries()).map(([date, events]) => {
-              const isToday = date === todayStr
+              const isToday = date === today
               const dateObj = new Date(date + "T00:00:00")
               const dayLabel = dateObj.toLocaleDateString("es-DO", { weekday: "long", month: "long", day: "numeric" })
 

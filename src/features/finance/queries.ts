@@ -96,7 +96,7 @@ export function useCorrectAccountBalance() {
 
 // ── Transactions ──
 
-export function useTransactions(householdId: string | null, filters?: { type?: string; paid?: string; search?: string }) {
+export function useTransactions(householdId: string | null, filters?: { type?: string; paid?: string; search?: string; account_id?: string; category_id?: string }) {
   return useQuery({
     queryKey: qk.transactions.list(householdId ?? "", filters ?? {}),
     queryFn: async () => {
@@ -120,6 +120,12 @@ export function useTransactions(householdId: string | null, filters?: { type?: s
       }
       if (filters?.search) {
         query = query.ilike("description", `%${filters.search}%`)
+      }
+      if (filters?.account_id) {
+        query = query.eq("account_id", filters.account_id)
+      }
+      if (filters?.category_id) {
+        query = query.eq("category_id", filters.category_id)
       }
 
       const { data, error } = await query

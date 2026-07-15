@@ -34,7 +34,7 @@ import {
   Wallet,
   RefreshCw,
 } from "lucide-react"
-import { formatMoney, formatShortDate, cn } from "@/lib/utils"
+import { formatMoney, formatShortDate, cn, todayStr } from "@/lib/utils"
 import { useHousehold } from "@/lib/use-household"
 import { useObligations, useCreateObligation, useAddObligationPayment } from "@/features/finance/queries"
 import { useCreateObligationPaymentWithTransaction } from "@/features/finance/queries"
@@ -84,7 +84,7 @@ export function ObligationsPage() {
   const [formDueDate, setFormDueDate] = useState("")
 
   const [paymentAmount, setPaymentAmount] = useState("")
-  const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split("T")[0])
+  const [paymentDate, setPaymentDate] = useState(todayStr())
   const [paymentAccountId, setPaymentAccountId] = useState("")
 
   const [batchOpen, setBatchOpen] = useState(false)
@@ -224,7 +224,7 @@ export function ObligationsPage() {
         onSuccess: () => {
           setPaymentForm(null)
           setPaymentAmount("")
-          setPaymentDate(new Date().toISOString().split("T")[0])
+          setPaymentDate(todayStr())
           setPaymentAccountId("")
         },
       })
@@ -237,7 +237,7 @@ export function ObligationsPage() {
         onSuccess: () => {
           setPaymentForm(null)
           setPaymentAmount("")
-          setPaymentDate(new Date().toISOString().split("T")[0])
+          setPaymentDate(todayStr())
         },
       })
     }
@@ -256,7 +256,7 @@ export function ObligationsPage() {
     const obl = list.find(o => o.id === obligationId)
     const remaining = obl ? Number(obl.total_amount) - Number(obl.paid_amount) : 0
     setPaymentAmount(String(remaining))
-    setPaymentDate(new Date().toISOString().split("T")[0])
+    setPaymentDate(todayStr())
     setPaymentAccountId("")
     setPaymentForm(obligationId)
   }
@@ -655,7 +655,7 @@ export function ObligationsPage() {
                     onClick={() => {
                       const d = new Date()
                       d.setMonth(d.getMonth() + 1)
-                      setFormDueDate(d.toISOString().split("T")[0])
+                      setFormDueDate(todayStr())
                     }}
                   >
                     +1 mes

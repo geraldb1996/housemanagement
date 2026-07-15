@@ -39,6 +39,10 @@ export function truncate(str: string, len: number) {
   return str.slice(0, len) + "..."
 }
 
+export function todayStr() {
+  return new Date().toLocaleDateString("en-CA")
+}
+
 export function downloadExcelFromJson(
   rows: Record<string, unknown>[],
   filename: string

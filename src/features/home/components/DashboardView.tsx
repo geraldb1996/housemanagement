@@ -26,7 +26,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { CardSkeleton, LoadingSkeleton } from "@/components/data/LoadingSkeleton"
 import { EmptyState } from "@/components/data/EmptyState"
-import { formatMoney, formatShortDate } from "@/lib/utils"
+import { formatMoney, formatShortDate, todayStr } from "@/lib/utils"
+import { sumBalancesInBaseCurrency } from "@/lib/exchange-rates"
+import { useExchangeRates } from "@/features/settings/queries"
 import type {
   Account,
   Transaction,
@@ -38,6 +40,8 @@ import type {
 export function DashboardView({ userName }: { userName?: string | null }) {
   const router = useRouter()
   const { householdId } = useHousehold()
+
+  const { data: exchangeRates } = useExchangeRates(householdId || null)
 
   const now = useMemo(() => new Date(), [])
   const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`
@@ -143,7 +147,11 @@ export function DashboardView({ userName }: { userName?: string | null }) {
     queryKey: qk.subscriptions.active(householdId),
     queryFn: async () => {
       if (!householdId) return [] as Subscription[]
-      const thirtyDays = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]
+      const d = new Date()
+      const offset = d.getTimezoneOffset()
+      const local = new Date(d.getTime() - offset * 60000)
+      local.setDate(local.getDate() + 30)
+      const thirtyDays = local.toISOString().split("T")[0]
       const supabase = createClient()
       const { data, error } = await supabase
         .from("subscriptions")
@@ -160,10 +168,11 @@ export function DashboardView({ userName }: { userName?: string | null }) {
   })
 
   const netWorth = useMemo(() => {
-    return (accountsQuery.data ?? [])
-      .filter(a => a.include_in_net_worth)
-      .reduce((sum, a) => sum + a.current_balance, 0)
-  }, [accountsQuery.data])
+    return sumBalancesInBaseCurrency(
+      (accountsQuery.data ?? []).filter(a => a.include_in_net_worth),
+      exchangeRates ?? [],
+    )
+  }, [accountsQuery.data, exchangeRates])
 
   const incomeMTD = useMemo(() => {
     return (monthTransactionsQuery.data ?? [])

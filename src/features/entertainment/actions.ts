@@ -67,7 +67,9 @@ export async function generateSubscriptionTransaction(subscriptionId: string) {
 
   if (!sub.account_id) throw new Error("La suscripción no tiene cuenta asignada")
 
-  const today = new Date().toISOString().split("T")[0]
+  const d = new Date()
+  const offset = d.getTimezoneOffset()
+  const today = new Date(d.getTime() - offset * 60000).toISOString().split("T")[0]
 
   const { error: txErr } = await supabase.from("transactions").insert({
     household_id: householdId,
